@@ -10,8 +10,8 @@
 
 #### 規則1: 語言使用規範(Language Prototcol)
   - **要求**: 
-    - 所有對話、回應、文件內容生成必須使用繁體中文。
-    - 文件包含: spec.md、requirements.md、
+    - 所有對話、回應、文件內容生成 `必須` 使用繁體中文。
+    - 文件包含: spec.md、checklists/requirements.md 檔案都 `必須` 使用繁體中文。
     - 不可使用任何的表情符號，來輔助說明。
 
   - **例外情況**: 
