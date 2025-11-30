@@ -1,20 +1,37 @@
 ### 輸入內容記錄
 
+> 統一使用 Agent: claude Sonnet 4.5
+
 #### boa-bch-transformat
 
+> 未使用預先建立的 DB table 結構
+
 ```yaml
-    請參考 **/references-docs/pre-architecture.md 了解基本架構說明,  開始建立第一個 spec。
+    請優先參考 constitution.md ，並到 **/references-docs/pre-architecture.md 了解基本架構說明。
     - 規格命名: boa-bch-transformat
     - 規格說明:
-        1. 讀取的資料是 txt 檔案, 欲將其轉換成 parquet 檔案。
+        1. 讀取的資料類型都是 txt 檔案, 欲將其轉換成 parquet 檔案。
         2. 檔案內容
-            2.1 編碼類型可能會是 Big5 或 utf-8。
-            2.2 資料內容總共會有兩種類型, 參考共享結構 TB_FILE_META(DELIMITER_TYPE)
-                2.2.1 間隔符號分離(`||` 或 `&&` ...)
-                2.2.2 固定字串長度(參考共享結構 TB_COLUMN_META(COLUMN_LENGTH)
-            2.3 資料欄位順序, 參考共享結構 TB_COLUMN_META(COLUMN_INDEX)
-        3. werwer
-
+            2.1 編碼類型可能會是 big5 或 utf-8。
+            2.2 資料欄位會有順序性。
+            2.3 資料庫欄位需要紀錄欄位名稱，並且紀錄資料類型。
+                2.3.1 可能會有 String, int, double, timestamp 類型。 
+            2.4 資料內容總共會有兩種類型
+                2.4.1 間隔符號分離(`||` 或 `@!!@` ...), 不需擔心資料內容會包含類似符號。
+                    ex_1: AAAA||BBBB||CCCC||DDDD
+                    ex_2: AAAA@!!@BBBB@!!@CCCC@!!@DDDD
+                2.4.2 固定字串長度
+                    ex_1: 若欄位順序第一個長度值為 10, 欄位順序第一個長度值為 5,
+                          一筆的內容為 [111          223333]
+                    ex_2: 長度的內容值可能不一定會置左置右, 務必進行除空白。
+                    ex_3: 2.1 的編碼內容會影響長度, 務必處理。
+            2.5 每個欄位都會需要一個轉碼型態，標註後續若有遮罩或轉換用途。
+            2.5 會有不同的服務來處理檔案，需有一個欄位判斷資料庫的檔案是否屬於這個規格要處理。
+            2.6 資料處理有異常需拋出錯誤，為了 graylog 捕捉進行告警。
+        3. 完成後呼叫另一隻服務，此服務後續規格會建立，主要進行遮罩或轉換。
+            3.1. 需具備重試功能，若呼叫三次則屬於執行失敗。
+        4. 一次讀取 DB 所有需要的檔案資料，透過逐檔處理的方式。
+        5. 多 pod 競爭使用 PostgreSQL 資料庫的 advisory lock 機制進行處理。
 ```
 
 ---
