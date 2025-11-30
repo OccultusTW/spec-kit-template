@@ -12,7 +12,7 @@
 
   - 使用到的依賴:
     - SFTP: 為了與 Nas 溝通
-    - Database: PostgreSQL 資料庫
+    - Database: PostgreSQL 資料庫, 為了儲存檔案的相關細節, 與執行狀態。
     - 第三方 API: 同一個 k8s 的 API (transid 呼叫)
 
   - 資料來源:
@@ -39,7 +39,7 @@
         end
 
         subgraph External["External Systems"]
-            ExtAPI["外部 API<br/>(第三方服務)"]
+            ExtAPI["內部 API<br/>(不同 namespace 服務)"]
         end
 
         Files -->|SFTP 讀取| BCH1
