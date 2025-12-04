@@ -4,10 +4,13 @@
 
 #### boa-bch-transformat
 
-> 未使用預先建立的 DB table 結構
+<!-- 
+    step 1. 呼叫 `/specify`
+    未使用預先建立的 DB table 結構
+    -->
 
 ```yaml
-    請優先參考 constitution.md ，並到 **/references-docs/pre-architecture.md 了解基本架構說明。
+    請優先參考 constitution.md，並到 **/references-docs/pre-architecture.md 了解基本架構說明。
     - 規格命名: boa-bch-transformat
     - 規格說明:
         1. 讀取的資料類型都是 txt 檔案, 欲將其轉換成 parquet 檔案。
@@ -33,11 +36,26 @@
         4. 一次讀取 DB 所有需要的檔案資料，透過逐檔處理的方式。
         5. 多 pod 競爭使用 PostgreSQL 資料庫的 advisory lock 機制進行處理。
 ```
+<!--
+    step 2. 呼叫 `/plan`
+    -->
 
----
-
-#### boa-bch-de-dup
-
-
+```yaml
+    請優先參考 constitution.md，並參考 **/references-docs/plans/project-structure.md，採取標準應用程式型。
+    - 使用 基礎 python3.13 撰寫，必須建立虛擬環境(.venv) 並且開發時確保切換。
+    - 使用 pyarrow 進行資料處理，優先考慮 Stream 作法，來確保大資料能夠處理，避免記憶體爆掉。
+    - 使用 psycopg2 與資料庫連接，必須建立連線池，並且確保交易彼此不互相影響。
+    - 使用 SFTP 的 paramiko，並確保可以結合 pyarrow 來實現 Stream 作法。
+    - 使用 requests 呼叫 API。
+    - 使用 loguru 進行 log 紀錄。
+    - 必須拆分環境，主要區分 local, ut, uat, prod，必須確保每個環境可設定的參數都相同。
+    - 導入新套件時，為確保撰寫的依賴或工具未發生衝突，務必不可直接開始撰寫程式，總是先運行後確認執行結果正常。
+    - 資料庫設計
+        - 需具備紀錄每個檔案的執行任務表，成功與失敗都要紀錄結果，
+        - 執行任務表需具備重跑的欄位，同名檔案算是關聯關係，若前一筆失敗，當下執行的這筆必須註記前一筆的失敗任務 ID。
+        - 任務表每一筆資料都使用客製化的 ID，方便識別是哪一階段的任務。
+        - 任務 Sequence 透過資料表進行紀錄。此 spec 使用 transformat_ 作為前綴，後綴搭配 YYYYMMDD + 四碼數字從 0001 開始計算。
+        - 每次建立任務時都取用此 sequence 表。
+```
 
 ---
