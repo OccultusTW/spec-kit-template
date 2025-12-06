@@ -1,335 +1,277 @@
 openapi: 3.0.3
 info:
-  title: 下游遮罩轉換服務 API
+  title: Downstream Mask Service API
   description: |
-    BOA 批次轉檔服務呼叫的下游遮罩轉換服務 API 契約定義。
-    本服務負責接收轉換完成的 Parquet 檔案，進行遮罩與資料轉換處理。
+    下游遮罩服務 API，用於處理敏感資料的遮罩與加密。
+    
+    **部署環境**：與 BOA 批次轉檔服務在同一個 Kubernetes 叢集內
+    **認證方式**：無需 Token（內部服務間通訊）
+    **支援格式**：Parquet
   version: 1.0.0
   contact:
-    name: BOA 技術團隊
-    email: boa-tech@example.com
+    name: API Support
+    email: api-support@example.com
 
 servers:
-  - url: https://api.example.com/v1
-    description: 生產環境
-  - url: https://api-uat.example.com/v1
-    description: UAT 環境
-  - url: https://api-ut.example.com/v1
-    description: UT 環境
-  - url: http://localhost:8080/v1
-    description: 本地開發環境
-
-tags:
-  - name: mask
-    description: 遮罩轉換相關 API
+  - url: http://mask-service.default.svc.cluster.local:8080
+    description: K8s cluster internal service (UT)
+  - url: http://mask-service.uat.svc.cluster.local:8080
+    description: K8s cluster internal service (UAT)
+  - url: http://mask-service.prod.svc.cluster.local:8080
+    description: K8s cluster internal service (PROD)
 
 paths:
   /mask/process:
     post:
-      summary: 提交檔案遮罩轉換任務
-      description: |
-        接收轉換完成的 Parquet 檔案路徑，進行遮罩與資料轉換處理。
-        此 API 為非同步處理，立即返回接受狀態，實際處理在後台執行。
+      summary: Submit file processing request
+      description: 提交批次檔案處理請求，進行敏感資料的遮罩
+      operationId: submitMaskingRequest
       tags:
-        - mask
-      operationId: submitMaskTask
+        - Masking
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/MaskTaskRequest"
+              $ref: '#/components/schemas/MaskRequest'
             examples:
               example1:
-                summary: 成功提交範例
+                summary: Customer data with masking
                 value:
-                  task_id: "transformat_202512020001"
-                  file_path: "/nas/output/customer_20251202.parquet"
-                  source: "transformat-service"
-                  metadata:
-                    original_file: "customer_20251202.txt"
-                    rows_processed: 10000
-                    file_size_mb: 50
+                  task_id: "transformat_202512060001"
+                  input_file_path: "/data/output/customer_20251206.parquet"
+                  output_file_path: "/data/masked/customer_20251206.parquet"
+                  field_configs:
+                    - field_name: "customer_name"
+                      transform_type: "mask"
+                    - field_name: "id_number"
+                      transform_type: "mask"
+                    - field_name: "account_balance"
+                      transform_type: "encrypt"
       responses:
-        "200":
-          description: 成功接受遮罩轉換任務
+        '202':
+          description: Request accepted, processing in progress
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/MaskTaskResponse"
+                $ref: '#/components/schemas/MaskResponse'
               examples:
-                success:
-                  summary: 成功回應
+                example1:
                   value:
-                    status: "accepted"
-                    message: "遮罩轉換任務已接受"
-                    task_id: "transformat_202512020001"
-                    mask_task_id: "mask_202512020001"
-                    estimated_completion_time: "2025-12-02T10:15:00Z"
-        "400":
-          description: 請求參數錯誤
+                    task_id: "transformat_202512060001"
+                    status: "processing"
+                    message: "Request accepted"
+                    submitted_at: "2025-12-06T10:00:00Z"
+        '400':
+          description: Invalid request parameters
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: '#/components/schemas/ErrorResponse'
               examples:
-                invalid_file_path:
-                  summary: 檔案路徑無效
+                example1:
                   value:
-                    error_code: "INVALID_FILE_PATH"
-                    message: "檔案路徑格式錯誤或檔案不存在"
-                    detail: "/nas/output/customer_20251202.parquet 無法訪問"
-                missing_task_id:
-                  summary: 缺少任務 ID
-                  value:
-                    error_code: "MISSING_REQUIRED_FIELD"
-                    message: "缺少必填欄位：task_id"
-                    detail: "task_id 欄位為必填"
-        "401":
-          description: 未授權
+                    error_code: "INVALID_REQUEST"
+                    message: "Missing required field: task_id"
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: '#/components/schemas/ErrorResponse'
               examples:
-                unauthorized:
-                  summary: 未授權
+                example1:
                   value:
-                    error_code: "UNAUTHORIZED"
-                    message: "未提供有效的授權憑證"
-                    detail: "請在 Authorization header 中提供 Bearer token"
-        "422":
-          description: 無法處理的實體（業務驗證失敗）
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-              examples:
-                duplicate_task:
-                  summary: 重複的任務
-                  value:
-                    error_code: "DUPLICATE_TASK"
-                    message: "該任務 ID 已存在"
-                    detail: "task_id transformat_202512020001 已提交過"
-        "500":
-          description: 伺服器內部錯誤
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-              examples:
-                internal_error:
-                  summary: 內部錯誤
-                  value:
-                    error_code: "INTERNAL_SERVER_ERROR"
-                    message: "伺服器內部錯誤"
-                    detail: "無法連線至資料庫"
-        "503":
-          description: 服務暫時不可用
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-              examples:
-                service_unavailable:
-                  summary: 服務不可用
-                  value:
-                    error_code: "SERVICE_UNAVAILABLE"
-                    message: "服務暫時無法處理請求"
-                    detail: "系統維護中，請稍後再試"
-      security:
-        - bearerAuth: []
+                    error_code: "INTERNAL_ERROR"
+                    message: "Failed to process request"
 
   /mask/status/{task_id}:
     get:
-      summary: 查詢遮罩轉換任務狀態
-      description: |
-        根據任務 ID 查詢遮罩轉換任務的當前狀態與處理結果。
+      summary: Query processing status
+      description: 查詢批次檔案處理任務的執行狀態
+      operationId: queryMaskingStatus
       tags:
-        - mask
-      operationId: getMaskTaskStatus
+        - Masking
       parameters:
         - name: task_id
           in: path
           required: true
-          description: 原始轉檔服務的任務 ID
+          description: Task identifier
           schema:
             type: string
-            pattern: "^transformat_[0-9]{8}[0-9]{4}$"
-            example: "transformat_202512020001"
+            pattern: '^transformat_\d{12}$'
+          example: "transformat_202512060001"
       responses:
-        "200":
-          description: 成功取得任務狀態
+        '200':
+          description: Status retrieved successfully
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/MaskTaskStatusResponse"
+                $ref: '#/components/schemas/StatusResponse'
               examples:
-                completed:
-                  summary: 已完成
-                  value:
-                    task_id: "transformat_202512020001"
-                    mask_task_id: "mask_202512020001"
-                    status: "completed"
-                    message: "遮罩轉換已完成"
-                    result_path: "/nas/masked/customer_20251202.parquet"
-                    started_at: "2025-12-02T10:05:30Z"
-                    completed_at: "2025-12-02T10:15:00Z"
                 processing:
-                  summary: 處理中
+                  summary: Task is processing
                   value:
-                    task_id: "transformat_202512020001"
-                    mask_task_id: "mask_202512020001"
+                    task_id: "transformat_202512060001"
                     status: "processing"
-                    message: "遮罩轉換處理中"
-                    progress: 45
-                    started_at: "2025-12-02T10:05:30Z"
-                failed:
-                  summary: 處理失敗
+                    submitted_at: "2025-12-06T10:00:00Z"
+                    progress: 50
+                completed:
+                  summary: Task completed
                   value:
-                    task_id: "transformat_202512020001"
-                    mask_task_id: "mask_202512020001"
+                    task_id: "transformat_202512060001"
+                    status: "completed"
+                    submitted_at: "2025-12-06T10:00:00Z"
+                    completed_at: "2025-12-06T10:05:30Z"
+                    progress: 100
+                failed:
+                  summary: Task failed
+                  value:
+                    task_id: "transformat_202512060001"
                     status: "failed"
-                    message: "遮罩轉換失敗"
-                    error_message: "無法讀取 Parquet 檔案：權限不足"
-                    started_at: "2025-12-02T10:05:30Z"
-                    completed_at: "2025-12-02T10:06:00Z"
-        "404":
-          description: 任務不存在
+                    submitted_at: "2025-12-06T10:00:00Z"
+                    failed_at: "2025-12-06T10:02:15Z"
+                    error_message: "Invalid parquet file format"
+        '404':
+          description: Task not found
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: '#/components/schemas/ErrorResponse'
               examples:
-                not_found:
-                  summary: 任務不存在
+                example1:
                   value:
                     error_code: "TASK_NOT_FOUND"
-                    message: "找不到指定的任務"
-                    detail: "task_id transformat_202512020999 不存在"
-      security:
-        - bearerAuth: []
+                    message: "Task ID not found: transformat_202512060999"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   schemas:
-    MaskTaskRequest:
+    MaskRequest:
       type: object
       required:
         - task_id
-        - file_path
-        - source
+        - input_file_path
+        - output_file_path
+        - field_configs
       properties:
         task_id:
           type: string
-          description: 原始轉檔服務的任務 ID
-          pattern: "^transformat_[0-9]{8}[0-9]{4}$"
-          example: "transformat_202512020001"
-        file_path:
+          description: 任務唯一識別碼
+          pattern: '^transformat_\d{12}$'
+          example: "transformat_202512060001"
+        input_file_path:
           type: string
-          description: Parquet 檔案的完整路徑
-          minLength: 1
-          maxLength: 1000
-          example: "/nas/output/customer_20251202.parquet"
-        source:
+          description: 輸入 Parquet 檔案的完整路徑
+          example: "/data/output/customer_20251206.parquet"
+        output_file_path:
           type: string
-          description: 來源服務識別
-          enum:
-            - transformat-service
-          example: "transformat-service"
-        metadata:
-          type: object
-          description: 額外的元資料
-          additionalProperties: true
-          example:
-            original_file: "customer_20251202.txt"
-            rows_processed: 10000
-            file_size_mb: 50
+          description: 輸出 Parquet 檔案的完整路徑
+          example: "/data/masked/customer_20251206.parquet"
+        field_configs:
+          type: array
+          description: 欄位轉碼設定
+          items:
+            $ref: '#/components/schemas/FieldConfig'
+          minItems: 1
 
-    MaskTaskResponse:
+    FieldConfig:
       type: object
       required:
-        - status
-        - message
-        - task_id
-        - mask_task_id
+        - field_name
+        - transform_type
       properties:
+        field_name:
+          type: string
+          description: 欄位名稱
+          example: "customer_name"
+        transform_type:
+          type: string
+          description: 轉碼型態
+          enum:
+            - plain
+            - mask
+            - encrypt
+          example: "mask"
+
+    MaskResponse:
+      type: object
+      required:
+        - task_id
+        - status
+        - submitted_at
+      properties:
+        task_id:
+          type: string
+          description: 任務 ID
+          example: "transformat_202512060001"
         status:
           type: string
           description: 任務狀態
           enum:
-            - accepted
-          example: "accepted"
+            - processing
+            - completed
+            - failed
+          example: "processing"
         message:
           type: string
           description: 回應訊息
-          example: "遮罩轉換任務已接受"
-        task_id:
-          type: string
-          description: 原始轉檔服務的任務 ID
-          example: "transformat_202512020001"
-        mask_task_id:
-          type: string
-          description: 遮罩服務產生的任務 ID
-          example: "mask_202512020001"
-        estimated_completion_time:
+          example: "Request accepted"
+        submitted_at:
           type: string
           format: date-time
-          description: 預估完成時間（ISO 8601 格式）
-          example: "2025-12-02T10:15:00Z"
+          description: 提交時間 (ISO 8601)
+          example: "2025-12-06T10:00:00Z"
 
-    MaskTaskStatusResponse:
+    StatusResponse:
       type: object
       required:
         - task_id
-        - mask_task_id
         - status
-        - message
+        - submitted_at
       properties:
         task_id:
           type: string
-          description: 原始轉檔服務的任務 ID
-          example: "transformat_202512020001"
-        mask_task_id:
-          type: string
-          description: 遮罩服務的任務 ID
-          example: "mask_202512020001"
+          description: 任務 ID
+          example: "transformat_202512060001"
         status:
           type: string
           description: 任務狀態
           enum:
-            - pending
             - processing
             - completed
             - failed
           example: "completed"
-        message:
-          type: string
-          description: 狀態訊息
-          example: "遮罩轉換已完成"
-        result_path:
-          type: string
-          description: 處理完成的檔案路徑（僅 status=completed 時有值）
-          example: "/nas/masked/customer_20251202.parquet"
-        error_message:
-          type: string
-          description: 錯誤訊息（僅 status=failed 時有值）
-          example: "無法讀取 Parquet 檔案：權限不足"
-        progress:
-          type: integer
-          description: 處理進度（0-100，僅 status=processing 時有值）
-          minimum: 0
-          maximum: 100
-          example: 45
-        started_at:
+        submitted_at:
           type: string
           format: date-time
-          description: 開始處理時間（ISO 8601 格式）
-          example: "2025-12-02T10:05:30Z"
+          description: 提交時間
+          example: "2025-12-06T10:00:00Z"
         completed_at:
           type: string
           format: date-time
-          description: 完成時間（ISO 8601 格式）
-          example: "2025-12-02T10:15:00Z"
+          description: 完成時間（狀態為 completed 時）
+          example: "2025-12-06T10:05:30Z"
+        failed_at:
+          type: string
+          format: date-time
+          description: 失敗時間（狀態為 failed 時）
+          example: "2025-12-06T10:02:15Z"
+        error_message:
+          type: string
+          description: 錯誤訊息（狀態為 failed 時）
+          example: "Invalid parquet file format"
+        progress:
+          type: integer
+          description: 處理進度（0-100）
+          minimum: 0
+          maximum: 100
+          example: 50
 
     ErrorResponse:
       type: object
@@ -340,26 +282,16 @@ components:
         error_code:
           type: string
           description: 錯誤代碼
-          example: "INVALID_FILE_PATH"
+          example: "INVALID_REQUEST"
         message:
           type: string
           description: 錯誤訊息
-          example: "檔案路徑格式錯誤或檔案不存在"
-        detail:
-          type: string
-          description: 詳細錯誤說明
-          example: "/nas/output/customer_20251202.parquet 無法訪問"
-        timestamp:
-          type: string
-          format: date-time
-          description: 錯誤發生時間
-          example: "2025-12-02T10:05:30Z"
+          example: "Missing required field: task_id"
+        details:
+          type: object
+          description: 詳細錯誤資訊
+          additionalProperties: true
 
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-      description: |
-        使用 JWT Bearer Token 進行身份驗證。
-        請在 HTTP Header 中加入：Authorization: Bearer <token>
+tags:
+  - name: Masking
+    description: 資料遮罩與加密相關操作

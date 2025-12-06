@@ -219,6 +219,7 @@ boa-bch-transformat/
 以下項目標記為 **NEEDS CLARIFICATION**，需要在 Phase 0 進行研究：
 
 1. **pyarrow 串流處理最佳實踐**
+   - **重要**：固定長度欄位使用顯示寬度（全形中文=2，ASCII=1），需使用 wcwidth 依賴
    - 如何結合 paramiko SFTP 實現真正的串流讀取？
    - 如何確保大檔案（>1GB）在 2GB 記憶體限制內處理？
    - 批次大小（batch size）應該設定多少最優？
