@@ -127,8 +127,41 @@
 有需要改名成 requirements-plan.md 比較好嗎? 還是你覺得不需要?
 ```
 <!-- step 3.4. 執行結果: 不需要調整命名 -->
+
 <!-- step 3.5 執行 checklist  -->
 ```yaml
 phase 1 請說明一下，若我已經完成，請直接開始檢查
 ```
 <!-- step 3.5. 執行結果: 產出檢查清單報告，plan-phase1-report.md -->
+
+### Step 4.
+<!-- step 4.1 執行 plan  -->
+```yaml
+    請優先參考 constitution.md，並採取以下行動:
+    - 檢查一下 checklists/plan-phase1-report.md 結果，針對 錯誤處理與邊界條件 (CHK031-037) 的部分，進行調整。
+```
+<!-- step 4.1. 執行結果: 新增錯誤處理機制 -->
+
+<!-- step 4.1 執行 plan  -->
+```yaml
+    請優先參考 constitution.md，並採取以下行動:
+    - 針對 錯誤處理與邊界條件 (CHK031-037) 的部分，客製化的拋出錯誤問題，與現行整體服務會拋出哪些錯誤可以一目瞭然。
+    - 如: 一個自定義的 Exception，讓 try-cache 捕捉時確保處理檔案時，確保能夠記錄在設計好的資料結構中的 task 的 message 中。
+```
+<!-- step 4.1. 執行結果: 針對可能出現的錯誤，都整理出了錯誤的 ExceptionError，但太多種類 Exception -->
+
+<!-- step 4.2 執行 plan  -->
+```yaml
+    請優先參考 constitution.md，並採取以下行動:
+    - 針對 plan.md 計劃建立的客製化錯誤 Exception，能不能簡單整合成啟動失敗如連線問題, 處理檔案時可能遇到的錯誤問題，整理成 2~3種的錯誤就好，因為這樣在追蹤自定義的錯誤訊息時，比較容易。
+```
+<!-- step 4.2. 執行結果: 整合成簡單幾份的錯誤 -->
+
+<!-- step 4.3 執行 plan  -->
+```yaml
+    請優先參考 constitution.md，並採取以下行動:
+    - 針對 plan.md 計劃建立的客製化錯誤 Exception，是不是現在的客製化錯誤沒有統一管理錯誤的訊息內容，
+      評估一下，是否可以透過類似 Enum 的設計，在 exception 裡面統一管理，避免每個錯誤，都各自定義不同的錯誤訊息。
+      log 也能直接印出，就不需要特別撰寫內容此錯誤了。 
+```
+<!-- step 4.3. 執行結果: 整合錯誤訊息到 Error code -->
