@@ -105,26 +105,26 @@ env=local
 # ---- 資料庫設定 ----
 db.host=localhost
 db.port=5432
-db.name=boa_transform_db
-db.user=postgres
-db.password=your_password
+db.name=demo
+db.user=user
+db.password=password
 db.pool.min=5
 db.pool.max=15
 
 # ---- SFTP 設定（NAS 存取）----
 sftp.host=nas.example.com
-sftp.port=22
-sftp.user=boa_user
-sftp.password=your_sftp_password
+sftp.port=2222
+sftp.user=user
+sftp.password=password
 # 或使用金鑰
 # sftp.key_file=/path/to/private_key
 
 # ---- 檔案路徑設定 ----
-# 輸入檔案目錄（NAS SFTP 路徑）
-input_dir=/nas/boa/input
+# 輸入檔案目錄(NAS SFTP 路徑)
+input_dir=/upload/input
 
 # 輸出檔案目錄（本地暫存，最終上傳至 NAS）
-output_dir=/data/output
+output_dir=/upload/output
 
 # 遮罩後檔案目錄（下游服務輸出）
 masked_dir=/data/masked
