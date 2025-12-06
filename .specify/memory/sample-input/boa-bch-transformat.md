@@ -62,7 +62,7 @@
         - 每次建立任務時都取用此 sequence 表。
 ```
 
-<!-- step 3.1. 修正 plan 
+<!-- step 2.1. 修正 plan 
     針對產出的結果即早修正與提出。
 -->
 
@@ -82,7 +82,7 @@
      - 是否需要使用 python 的 wcwidth 依賴? 來進行實作，避免不是所有中文都代表 3 bytes 而計算錯誤的問題。
 
 ```
-<!-- step 3.2. 修正 plan 
+<!-- step 2.2. 修正 plan 
     針對產出的結果即早修正與提出。
 -->
 
@@ -91,4 +91,44 @@
     - 移除 file_records 的 spec_code 不需要特別在資料庫內容標注。可以改成來源，紀錄這份檔案是從何處來的。可允許為空。
     - 移除 file_tasks 的 created_at 和 updated_at，應該會和 start 和 completed 時間相同，不需使用。
 ```
+
 ---
+### Step 3.
+<!-- step 3. 執行 checklist 
+    檢查目前專案具備一致性，或需要的元素。
+-->
+```yaml
+    請優先參考 constitution.md，並採取以下行動:
+    - 檢查一下 plan.md  有無問題，若有需要，產生一份新的 requirements.md 給 plan 也可以。
+```
+<!-- step 3. 執行結果: 產生了一份新的 requirements.md -->
+
+<!-- step 3.1. 執行 checklist  -->
+```yaml
+為何不依照 prompt 要求放在該放的地方? 原本的 checklist 是執行 specify 自行產生的，
+若判斷不需要，可自行考慮移除。
+```
+<!-- step 3.1. 執行結果: 移除新建立的 requirements.md, 並移動到 spec.md 底下 -->
+
+<!-- step 3.2. 執行 checklist  -->
+```yaml
+我有一個問題，你為什麼不遵循定義的 checklist 規則? 而是要放在 plan.md 底下
+```
+<!-- step 3.2. 執行結果: 移除 spec.md 底下新增的項目，但仍沒有建立新的 checklist -->
+
+<!-- step 3.3. 執行 checklist  -->
+```yaml
+    - 請檢查 plan.md 的內容，產出一份檢查表到 checklists 底下，若有需要，可以整合進現有針對 spec 產生的  requirements.md
+```
+<!-- step 3.3. 執行結果: 建立新的 checklist/plan.md，列出實際 plan.md 的尚未填寫的待檢查清單 -->
+
+<!-- step 3.4. 執行 checklist  -->
+```yaml
+有需要改名成 requirements-plan.md 比較好嗎? 還是你覺得不需要?
+```
+<!-- step 3.4. 執行結果: 不需要調整命名 -->
+<!-- step 3.5 執行 checklist  -->
+```yaml
+phase 1 請說明一下，若我已經完成，請直接開始檢查
+```
+<!-- step 3.5. 執行結果: 產出檢查清單報告，plan-phase1-report.md -->
