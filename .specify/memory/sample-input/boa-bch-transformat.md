@@ -7,7 +7,7 @@
 <!-- 
     step 1. 呼叫 `/specify`
     未使用預先建立的 DB table 結構
-    -->
+-->
 
 ```yaml
     請優先參考 constitution.md，並到 **/references-docs/pre-architecture.md 了解基本架構說明。
@@ -36,9 +36,9 @@
         4. 一次讀取 DB 所有需要的檔案資料，透過逐檔處理的方式。
         5. 多 pod 競爭使用 PostgreSQL 資料庫的 advisory lock 機制進行處理。
 ```
-<!--
-    step 2. 呼叫 `/plan`
-    -->
+<!-- step 2. 呼叫 `/plan` 
+    針對技術和設計和想使用哪些依賴可先提供。
+-->
 
 ```yaml
     請優先參考 constitution.md，並參考 **/references-docs/plans/project-structure.md，採取標準應用程式型。
@@ -58,4 +58,24 @@
         - 每次建立任務時都取用此 sequence 表。
 ```
 
+<!-- step 3. 修正 plan 
+    針對產出的結果即早修正與提出。
+-->
+
+```yaml
+    請優先參考 constitution.md，並採取以下行動:
+     - 不要調整資料庫的事物隔離等級。務必總是採取使用資料庫預設的事物隔離等級。
+     - 移除 sequence 的 create_time 和 update_time 紀錄此欄位無意義，和相關 trigger。
+     - 移除 file_records, field_definitions, ile_tasks 的 update_at 的 trigger，此欄位需透過程式主動更新。
+     - 移除 file_tasks 的 process_pod，使用的是 k8s cronjob 機制，保留 pod 的命名無意義。
+     - 移除 file_tasks 的 retry_count 和 metadata，紀錄此資訊無意義。
+     - 移除 下游 API 使用的 Token，都屬於同一座 k8s 不需使用。
+     - 移除轉碼型態的雜湊類型。
+     - 來源的路徑和寫出的路徑基本上是固定的，可以透過 properties 寫死就好不需寫入 DB。DB 資料只需儲存檔案名稱即可。 
+     - 不需要考慮操作如何建立資料庫和初始化資料。直接提供單份的完整假資料的 SQL 語法即可。
+    請說明以下有疑慮內容，若有設計上的錯誤，直接修正:
+     - 為何 file_records.field_widths 紀錄欄位長度在 field_definitions.field_length 還要建立? 是否考慮移除 field_widths?
+     - 是否需要使用 python 的 wcwidth 依賴? 來進行實作，避免不是所有中文都代表 3 bytes 而計算錯誤的問題。
+
+```
 ---
