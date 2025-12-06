@@ -32,7 +32,7 @@ description: "BOA 批次轉檔服務實作任務清單"
 - [ ] T001 建立專案目錄結構（依照 plan.md §專案結構）
 - [ ] T002 初始化 Python 3.13 虛擬環境（.venv）
 - [ ] T003 [P] 建立 requirements.txt（pyarrow, psycopg2, paramiko, requests, loguru, wcwidth, tenacity）
-- [ ] T004 [P] 配置環境檔案（config/env/local.env, ut.env, uat.env, prod.env）
+- [ ] T004 [P] 配置環境檔案（resources/env/local.env, ut.env, uat.env, prod.env）
 - [ ] T005 [P] 建立 .gitignore（排除 .venv, *.pyc, __pycache__, .env）
 
 **檢查點**：執行 `python --version` 確認 3.13，執行 `pip list` 確認所有依賴安裝成功

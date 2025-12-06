@@ -166,9 +166,18 @@ phase 1 請說明一下，若我已經完成，請直接開始檢查
 ```
 <!-- step 4.3. 執行結果: 整合錯誤訊息到 Error code -->
 
-### Step 5.
+### Step 5. task
 <!-- step 5.1 執行 task -->
 ```yaml
     請優先參考 constitution.md，並採取以下行動:
     - 拆分 task 任務時，確保每個任務都足夠小，並且能夠立即驗證結果。
+```
+
+### Step 6. plan
+<!-- step 6.1 執行 plan -->
+```yaml
+    請優先參考 constitution.md，並採取以下行動:
+    - 將專案結構的 env/ 的底下，拉到 resources/env/ 底下，我不想把各環境的配置放在 src 裡面。
+    請回覆以下問題，不需做任何調整: 
+    - 在 task 或 implement 階段時，作為開發階段的 DB 和 SFTP 預設值會使用是什麼? 會在哪個階段定義?
 ```

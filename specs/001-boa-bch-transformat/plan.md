@@ -147,12 +147,7 @@ boa-bch-transformat/
 │       ├── main.py             # 應用程式入口點
 │       ├── config/
 │       │   ├── __init__.py
-│       │   ├── settings.py     # 環境配置（local/ut/uat/prod）
-│       │   └── env/
-│       │       ├── local.env
-│       │       ├── ut.env
-│       │       ├── uat.env
-│       │       └── prod.env
+│       │   └── settings.py     # 環境配置（local/ut/uat/prod）
 │       ├── models/
 │       │   ├── __init__.py
 │       │   ├── file_record.py  # 檔案記錄實體
@@ -193,6 +188,12 @@ boa-bch-transformat/
 │       ├── sample_delimited_big5.txt
 │       ├── sample_fixed_length_utf8.txt
 │       └── sample_spec_config.json
+├── resources/
+│   └── env/
+│       ├── local.env
+│       ├── ut.env
+│       ├── uat.env
+│       └── prod.env
 ├── docs/
 │   └── architecture.md          # 架構說明文件
 ├── scripts/
@@ -209,7 +210,7 @@ boa-bch-transformat/
 - 使用 `src/transformat/` 作為主要應用程式模組，遵循 Python 最佳實踐
 - 清晰分離 models（實體）、services（業務邏輯）、repositories（資料存取）、utils（工具函數）
 - 建立獨立的 exceptions 模組管理自訂異常
-- 使用 config/env/ 目錄管理多環境配置
+- 使用 resource/env/ 目錄管理多環境配置（位於專案根目錄，不在 src 內）
 - 測試分為 unit（單元測試）與 integration（整合測試），並提供測試資料 fixtures
 
 ## 技術背景 - 需要釐清的項目
