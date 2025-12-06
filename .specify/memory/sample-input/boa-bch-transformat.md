@@ -2,7 +2,7 @@
 
 > 統一使用 Agent: claude Sonnet 4.5
 
-### Step 1. 
+### Step 1. specify
 
 <!-- 
     step 1. 呼叫 `/specify`
@@ -38,7 +38,7 @@
 ```
 
 ---
-### Step 2.
+### Step 2. plan
 
 <!-- step 2. 呼叫 `/plan` 
     針對技術和設計和想使用哪些依賴可先提供。
@@ -93,7 +93,7 @@
 ```
 
 ---
-### Step 3.
+### Step 3. checklist
 <!-- step 3. 執行 checklist 
     檢查目前專案具備一致性，或需要的元素。
 -->
@@ -134,7 +134,7 @@ phase 1 請說明一下，若我已經完成，請直接開始檢查
 ```
 <!-- step 3.5. 執行結果: 產出檢查清單報告，plan-phase1-report.md -->
 
-### Step 4.
+### Step 4. plan 
 <!-- step 4.1 執行 plan  -->
 ```yaml
     請優先參考 constitution.md，並採取以下行動:
@@ -165,3 +165,10 @@ phase 1 請說明一下，若我已經完成，請直接開始檢查
       log 也能直接印出，就不需要特別撰寫內容此錯誤了。 
 ```
 <!-- step 4.3. 執行結果: 整合錯誤訊息到 Error code -->
+
+### Step 5.
+<!-- step 5.1 執行 task -->
+```yaml
+    請優先參考 constitution.md，並採取以下行動:
+    - 拆分 task 任務時，確保每個任務都足夠小，並且能夠立即驗證結果。
+```
