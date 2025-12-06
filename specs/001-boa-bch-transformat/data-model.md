@@ -39,7 +39,7 @@ erDiagram
     FILE_RECORDS {
         bigint id PK
         varchar file_name UK
-        varchar spec_code
+        varchar source
         varchar encoding
         varchar format_type
         varchar delimiter
@@ -67,8 +67,6 @@ erDiagram
         timestamp completed_at
         text error_message
         varchar previous_failed_task_id FK
-        timestamp created_at
-        timestamp updated_at
     }
     
     TASK_SEQUENCES {
@@ -91,7 +89,7 @@ erDiagram
 CREATE TABLE file_records (
     id BIGSERIAL PRIMARY KEY,
     file_name VARCHAR(255) NOT NULL UNIQUE,          -- 檔案名稱（唯一）
-    spec_code VARCHAR(50) NOT NULL,                  -- 規格識別碼（此專案為 'boa-bch-transformat'）
+    source VARCHAR(100),                             -- 檔案來源（可為空，例如：'NAS-A', 'SFTP-Server-1'）
     encoding VARCHAR(20) NOT NULL,                   -- 編碼類型（'big5' 或 'utf-8'）
     format_type VARCHAR(20) NOT NULL,                -- 資料格式類型（'delimited' 或 'fixed_length'）
     delimiter VARCHAR(10),                           -- 分隔符號（format_type='delimited' 時使用）
@@ -107,7 +105,6 @@ CREATE TABLE file_records (
 );
 
 -- 索引
-CREATE INDEX idx_file_records_spec_code ON file_records(spec_code);
 CREATE INDEX idx_file_records_created_at ON file_records(created_at);
 ```
 
@@ -117,7 +114,7 @@ CREATE INDEX idx_file_records_created_at ON file_records(created_at);
 |-----|------|------|------|------|
 | id | BIGSERIAL | ✓ | 主鍵（自增） | 1 |
 | file_name | VARCHAR(255) | ✓ | 檔案名稱，唯一識別 | `data_20251202.txt` |
-| spec_code | VARCHAR(50) | ✓ | 規格識別碼 | `boa-bch-transformat` |
+| source | VARCHAR(100) | 選填 | 檔案來源 | `NAS-A` 或 `SFTP-Server-1` |
 | encoding | VARCHAR(20) | ✓ | 編碼類型 | `big5` 或 `utf-8` |
 | format_type | VARCHAR(20) | ✓ | 資料格式 | `delimited` 或 `fixed_length` |
 | delimiter | VARCHAR(10) | 條件 | 分隔符號 | `\|\|` 或 `@!!@` |
@@ -129,10 +126,12 @@ CREATE INDEX idx_file_records_created_at ON file_records(created_at);
 **移除項目**：
 - ❌ `file_path`：檔案路徑透過 properties 配置（`input_dir` + `file_name`）
 - ❌ `field_widths`：改用 `field_definitions.field_length` 記錄
+- ❌ `spec_code`：改為 `source`（紀錄檔案來源，可為空）
 
 **保留理由**：
 - ✅ `file_name`：唯一識別檔案
 - ✅ `delimiter`：分隔符號格式需要
+- ✅ `source`：記錄檔案來源（選填），便於追蹤
 
 ---
 
@@ -231,8 +230,6 @@ CREATE TABLE file_tasks (
     completed_at TIMESTAMP,                          -- 完成時間
     error_message TEXT,                              -- 錯誤訊息
     previous_failed_task_id VARCHAR(50) REFERENCES file_tasks(task_id),  -- 前一次失敗的任務 ID
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP,                            -- 由程式主動更新，無 trigger
     
     CONSTRAINT chk_status CHECK (status IN ('pending', 'processing', 'completed', 'failed'))
 );
@@ -240,7 +237,7 @@ CREATE TABLE file_tasks (
 -- 索引
 CREATE INDEX idx_file_tasks_status ON file_tasks(status);
 CREATE INDEX idx_file_tasks_file_record ON file_tasks(file_record_id);
-CREATE INDEX idx_file_tasks_created_at ON file_tasks(created_at);
+CREATE INDEX idx_file_tasks_started_at ON file_tasks(started_at);
 CREATE INDEX idx_file_tasks_file_name ON file_tasks(file_name);
 ```
 
@@ -256,8 +253,6 @@ CREATE INDEX idx_file_tasks_file_name ON file_tasks(file_name);
 | completed_at | TIMESTAMP | 選填 | 完成時間 | `2025-12-02 10:05:30` |
 | error_message | TEXT | 選填 | 錯誤訊息 | `編碼錯誤：無法解碼 big5 格式` |
 | previous_failed_task_id | VARCHAR(50) | 選填 | 前一次失敗的任務 ID | `transformat_202512010005` |
-| created_at | TIMESTAMP | ✓ | 建立時間 | `2025-12-02 10:00:00` |
-| updated_at | TIMESTAMP | 選填 | 更新時間（程式更新） | `2025-12-02 10:05:30` |
 
 ### 設計說明
 
@@ -266,6 +261,7 @@ CREATE INDEX idx_file_tasks_file_name ON file_tasks(file_name);
 - ❌ `result_path`：輸出路徑透過 properties 配置（`output_dir` + `file_name`）
 - ❌ `retry_count`：可從 `previous_failed_task_id` 鏈追蹤
 - ❌ `metadata`：不需要額外元資料
+- ❌ `created_at` 和 `updated_at`：與 started_at/completed_at 重複
 
 **保留理由**：
 - ✅ `previous_failed_task_id`：追蹤重試歷史
@@ -321,7 +317,7 @@ CREATE UNIQUE INDEX idx_task_sequences_date ON task_sequences(sequence_date);
 CREATE TABLE file_records (
     id BIGSERIAL PRIMARY KEY,
     file_name VARCHAR(255) NOT NULL UNIQUE,
-    spec_code VARCHAR(50) NOT NULL,
+    source VARCHAR(100),
     encoding VARCHAR(20) NOT NULL,
     format_type VARCHAR(20) NOT NULL,
     delimiter VARCHAR(10),
@@ -335,7 +331,6 @@ CREATE TABLE file_records (
     )
 );
 
-CREATE INDEX idx_file_records_spec_code ON file_records(spec_code);
 CREATE INDEX idx_file_records_created_at ON file_records(created_at);
 
 -- 2. 建立 field_definitions 表
@@ -366,14 +361,12 @@ CREATE TABLE file_tasks (
     completed_at TIMESTAMP,
     error_message TEXT,
     previous_failed_task_id VARCHAR(50) REFERENCES file_tasks(task_id),
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP,
     CONSTRAINT chk_status CHECK (status IN ('pending', 'processing', 'completed', 'failed'))
 );
 
 CREATE INDEX idx_file_tasks_status ON file_tasks(status);
 CREATE INDEX idx_file_tasks_file_record ON file_tasks(file_record_id);
-CREATE INDEX idx_file_tasks_created_at ON file_tasks(created_at);
+CREATE INDEX idx_file_tasks_started_at ON file_tasks(started_at);
 CREATE INDEX idx_file_tasks_file_name ON file_tasks(file_name);
 
 -- 4. 建立 task_sequences 表
@@ -395,8 +388,8 @@ CREATE UNIQUE INDEX idx_task_sequences_date ON task_sequences(sequence_date);
 -- =====================================================
 
 -- 插入檔案記錄 - 分隔符號格式（big5）
-INSERT INTO file_records (file_name, spec_code, encoding, format_type, delimiter) VALUES
-('customer_20251206_001.txt', 'boa-bch-transformat', 'big5', 'delimited', '||');
+INSERT INTO file_records (file_name, source, encoding, format_type, delimiter) VALUES
+('customer_20251206_001.txt', 'NAS-A', 'big5', 'delimited', '||');
 
 -- 插入欄位定義 - customer_20251206_001.txt
 INSERT INTO field_definitions (file_record_id, field_name, field_order, data_type, transform_type) VALUES
@@ -407,8 +400,8 @@ INSERT INTO field_definitions (file_record_id, field_name, field_order, data_typ
 (1, 'account_balance', 5, 'double', 'encrypt');
 
 -- 插入檔案記錄 - 固定長度格式（utf-8）
-INSERT INTO file_records (file_name, spec_code, encoding, format_type) VALUES
-('transaction_20251206_001.txt', 'boa-bch-transformat', 'utf-8', 'fixed_length');
+INSERT INTO file_records (file_name, source, encoding, format_type) VALUES
+('transaction_20251206_001.txt', 'SFTP-Server-1', 'utf-8', 'fixed_length');
 
 -- 插入欄位定義 - transaction_20251206_001.txt（固定長度，使用顯示寬度）
 INSERT INTO field_definitions (file_record_id, field_name, field_order, data_type, field_length, transform_type) VALUES
@@ -425,15 +418,12 @@ INSERT INTO task_sequences (sequence_date, current_value) VALUES
 -- 插入任務記錄 - 已完成
 INSERT INTO file_tasks (
     task_id, file_record_id, file_name, status, 
-    started_at, completed_at, 
-    created_at, updated_at
+    started_at, completed_at
 ) VALUES (
     'transformat_202512060001',
     1,
     'customer_20251206_001.txt',
     'completed',
-    '2025-12-06 10:00:00',
-    '2025-12-06 10:05:30',
     '2025-12-06 10:00:00',
     '2025-12-06 10:05:30'
 );
@@ -441,8 +431,7 @@ INSERT INTO file_tasks (
 -- 插入任務記錄 - 失敗
 INSERT INTO file_tasks (
     task_id, file_record_id, file_name, status, 
-    started_at, completed_at, error_message,
-    created_at, updated_at
+    started_at, completed_at, error_message
 ) VALUES (
     'transformat_202512060002',
     2,
@@ -450,22 +439,19 @@ INSERT INTO file_tasks (
     'failed',
     '2025-12-06 10:10:00',
     '2025-12-06 10:10:15',
-    '編碼錯誤：檔案實際編碼為 big5，但資料庫記錄為 utf-8',
-    '2025-12-06 10:10:00',
-    '2025-12-06 10:10:15'
+    '編碼錯誤：檔案實際編碼為 big5，但資料庫記錄為 utf-8'
 );
 
 -- 插入任務記錄 - 重試（關聯到前一次失敗的任務）
 INSERT INTO file_tasks (
     task_id, file_record_id, file_name, status, 
-    previous_failed_task_id, created_at
+    previous_failed_task_id
 ) VALUES (
     'transformat_202512060003',
     2,
     'transaction_20251206_001.txt',
     'pending',
-    'transformat_202512060002',
-    '2025-12-06 10:15:00'
+    'transformat_202512060002'
 );
 ```
 
@@ -501,7 +487,7 @@ TXN0000003王小明      000060000.2520251206PEND
 ### 查詢待處理的檔案
 
 ```sql
--- 查詢屬於此規格且尚未處理的檔案
+-- 查詢來自特定來源且尚未處理的檔案
 SELECT 
     fr.id,
     fr.file_name,
@@ -509,7 +495,7 @@ SELECT
     fr.format_type,
     fr.delimiter
 FROM file_records fr
-WHERE fr.spec_code = 'boa-bch-transformat'
+WHERE fr.source = 'NAS-A'  -- 可選：依來源篩選
   AND NOT EXISTS (
       SELECT 1 
       FROM file_tasks ft 
@@ -537,13 +523,13 @@ ORDER BY field_order ASC;
 ### 查詢任務處理統計
 
 ```sql
--- 統計各狀態的任務數量
+-- 統計各狀態的任務數量（今天開始的任務）
 SELECT 
     status,
     COUNT(*) as task_count,
     COUNT(DISTINCT file_record_id) as unique_files
 FROM file_tasks
-WHERE created_at >= CURRENT_DATE
+WHERE started_at >= CURRENT_DATE OR (status = 'pending' AND task_id LIKE 'transformat_' || TO_CHAR(CURRENT_DATE, 'YYYYMMDD') || '%')
 GROUP BY status
 ORDER BY status;
 ```
@@ -556,13 +542,13 @@ SELECT
     t1.task_id as failed_task_id,
     t1.file_name,
     t1.error_message,
-    t1.created_at as failed_at,
+    t1.completed_at as failed_at,
     t2.task_id as retry_task_id,
     t2.status as retry_status
 FROM file_tasks t1
 LEFT JOIN file_tasks t2 ON t2.previous_failed_task_id = t1.task_id
 WHERE t1.status = 'failed'
-ORDER BY t1.created_at DESC;
+ORDER BY t1.completed_at DESC;
 ```
 
 ---
@@ -580,6 +566,21 @@ ORDER BY t1.created_at DESC;
 - ✅ 保留 `field_definitions.field_length`
 - ❌ 移除 `file_records.field_widths`
 - 程式從 `field_definitions` 按 `field_order` 讀取長度
+
+### 為何將 `spec_code` 改為 `source`？
+
+**原因**：
+- `spec_code` 固定為專案名稱（如 'boa-bch-transformat'），缺乏實際意義
+- 改為 `source` 記錄檔案來源（如 'NAS-A', 'SFTP-Server-1'），更有追蹤價值
+- 允許為空，不強制填寫
+
+### 為何移除 `file_tasks` 的 `created_at` 和 `updated_at`？
+
+**原因**：
+- `created_at` 通常與 `started_at` 相同（任務建立後立即開始）
+- `updated_at` 通常與 `completed_at` 相同（任務完成時最後更新）
+- **資料重複**，增加不必要的維護成本
+- 使用 `started_at` 和 `completed_at` 已足夠追蹤任務時間
 
 ### 為何需要 `wcwidth`？
 

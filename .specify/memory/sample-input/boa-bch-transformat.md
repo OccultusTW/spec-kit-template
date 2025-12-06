@@ -1,8 +1,8 @@
-### 輸入內容記錄
+### boa-bch-transformat 輸入內容記錄
 
 > 統一使用 Agent: claude Sonnet 4.5
 
-#### boa-bch-transformat
+### Step 1. 
 
 <!-- 
     step 1. 呼叫 `/specify`
@@ -36,6 +36,10 @@
         4. 一次讀取 DB 所有需要的檔案資料，透過逐檔處理的方式。
         5. 多 pod 競爭使用 PostgreSQL 資料庫的 advisory lock 機制進行處理。
 ```
+
+---
+### Step 2.
+
 <!-- step 2. 呼叫 `/plan` 
     針對技術和設計和想使用哪些依賴可先提供。
 -->
@@ -58,7 +62,7 @@
         - 每次建立任務時都取用此 sequence 表。
 ```
 
-<!-- step 3. 修正 plan 
+<!-- step 3.1. 修正 plan 
     針對產出的結果即早修正與提出。
 -->
 
@@ -77,5 +81,14 @@
      - 為何 file_records.field_widths 紀錄欄位長度在 field_definitions.field_length 還要建立? 是否考慮移除 field_widths?
      - 是否需要使用 python 的 wcwidth 依賴? 來進行實作，避免不是所有中文都代表 3 bytes 而計算錯誤的問題。
 
+```
+<!-- step 3.2. 修正 plan 
+    針對產出的結果即早修正與提出。
+-->
+
+```yaml
+    請優先參考 constitution.md，並採取以下行動:
+    - 移除 file_records 的 spec_code 不需要特別在資料庫內容標注。可以改成來源，紀錄這份檔案是從何處來的。可允許為空。
+    - 移除 file_tasks 的 created_at 和 updated_at，應該會和 start 和 completed 時間相同，不需使用。
 ```
 ---
