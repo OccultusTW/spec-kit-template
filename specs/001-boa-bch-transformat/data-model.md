@@ -1,23 +1,9 @@
 # 資料模型設計：BOA 批次轉檔服務
 
 **專案**：boa-bch-transformat  
-**日期**：2025-12-06  
-**版本**：2.0（修正版）  
+**日期**：2025-12-07  
+**版本**：4.0  
 **狀態**：設計中
-
----
-
-## 修正說明
-
-本次修正基於以下需求：
-1. ❌ 移除 `file_records.field_widths`（與 `field_definitions.field_length` 重複）
-2. ❌ 移除 `file_records.file_path` 和 `file_tasks.result_path`（路徑透過 properties 配置）
-3. ❌ 移除 `file_tasks.processing_pod`（K8s CronJob 無需記錄）
-4. ❌ 移除 `file_tasks.retry_count` 和 `metadata`（無意義）
-5. ❌ 移除所有 `updated_at` 的 trigger（改由程式主動更新）
-6. ❌ 移除 `task_sequences.created_at` 和 `updated_at`（無意義）
-7. ❌ 移除轉碼型態的 `hash` 類型
-8. ✅ 保留 `field_definitions.field_length`（固定長度格式需要）
 
 ---
 
@@ -31,14 +17,14 @@
 
 ```mermaid
 erDiagram
-    FILE_RECORDS ||--o{ FILE_TASKS : "generates"
-    FILE_RECORDS ||--o{ FIELD_DEFINITIONS : "has"
+    FILE_SPECIFICATIONS ||--o{ FILE_TASKS : "defines structure for"
+    FILE_SPECIFICATIONS ||--o{ FIELD_DEFINITIONS : "has"
     FILE_TASKS ||--o| FILE_TASKS : "retries from"
     TASK_SEQUENCES ||--|| FILE_TASKS : "provides id"
     
-    FILE_RECORDS {
+    FILE_SPECIFICATIONS {
         bigint id PK
-        varchar file_name UK
+        varchar file_prefix UK
         varchar source
         varchar encoding
         varchar format_type
@@ -49,7 +35,7 @@ erDiagram
     
     FIELD_DEFINITIONS {
         bigint id PK
-        bigint file_record_id FK
+        bigint file_spec_id FK
         varchar field_name
         int field_order
         varchar data_type
@@ -60,7 +46,7 @@ erDiagram
     
     FILE_TASKS {
         varchar task_id PK
-        bigint file_record_id FK
+        bigint file_spec_id FK
         varchar file_name
         varchar status
         timestamp started_at
@@ -78,17 +64,17 @@ erDiagram
 
 ---
 
-## 1. 檔案記錄表（file_records）
+## 1. 主檔規格表（file_specifications）
 
 ### 用途
-儲存需要處理的檔案基本資訊與格式定義，每筆記錄代表一個待轉換的文字檔案。
+儲存檔案解析規格配置，每筆記錄代表一類檔案的解析規則。此表的資料在服務啟動前透過 SQL 腳本預先建立，在服務運行期間不會動態新增或修改。
 
 ### 表結構
 
 ```sql
-CREATE TABLE file_records (
+CREATE TABLE file_specifications (
     id BIGSERIAL PRIMARY KEY,
-    file_name VARCHAR(255) NOT NULL UNIQUE,          -- 檔案名稱（唯一）
+    file_prefix VARCHAR(100) NOT NULL UNIQUE,        -- 檔案前綴（唯一），例如：'customer', 'transaction'
     source VARCHAR(100),                             -- 檔案來源（可為空，例如：'NAS-A', 'SFTP-Server-1'）
     encoding VARCHAR(20) NOT NULL,                   -- 編碼類型（'big5' 或 'utf-8'）
     format_type VARCHAR(20) NOT NULL,                -- 資料格式類型（'delimited' 或 'fixed_length'）
@@ -105,7 +91,8 @@ CREATE TABLE file_records (
 );
 
 -- 索引
-CREATE INDEX idx_file_records_created_at ON file_records(created_at);
+CREATE INDEX idx_file_specifications_prefix ON file_specifications(file_prefix);
+CREATE INDEX idx_file_specifications_created_at ON file_specifications(created_at);
 ```
 
 ### 欄位說明
@@ -113,25 +100,34 @@ CREATE INDEX idx_file_records_created_at ON file_records(created_at);
 | 欄位 | 類型 | 必填 | 說明 | 範例 |
 |-----|------|------|------|------|
 | id | BIGSERIAL | ✓ | 主鍵（自增） | 1 |
-| file_name | VARCHAR(255) | ✓ | 檔案名稱，唯一識別 | `data_20251202.txt` |
+| file_prefix | VARCHAR(100) | ✓ | 檔案前綴，唯一識別 | `customer`, `transaction` |
 | source | VARCHAR(100) | 選填 | 檔案來源 | `NAS-A` 或 `SFTP-Server-1` |
 | encoding | VARCHAR(20) | ✓ | 編碼類型 | `big5` 或 `utf-8` |
 | format_type | VARCHAR(20) | ✓ | 資料格式 | `delimited` 或 `fixed_length` |
-| delimiter | VARCHAR(10) | 條件 | 分隔符號 | `\|\|` 或 `@!!@` |
+| delimiter | VARCHAR(10) | 條件 | 分隔符號 | `||` 或 `@!!@` |
 | created_at | TIMESTAMP | ✓ | 建立時間 | `2025-12-02 10:00:00` |
 | updated_at | TIMESTAMP | 選填 | 更新時間（程式更新） | `2025-12-02 10:30:00` |
 
 ### 設計說明
 
+**重要變更**：
+- ✅ `file_prefix`：改為檔案前綴（例如 `customer_`），用於比對 NAS 中的實際檔案
+- ✅ 此表儲存**主檔規格配置**，而非個別檔案記錄
+- ✅ 資料在服務啟動前透過 SQL 腳本匯入，不是運行時動態建立
+
 **移除項目**：
-- ❌ `file_path`：檔案路徑透過 properties 配置（`input_dir` + `file_name`）
+- ❌ `file_path`：檔案路徑透過 properties 配置（`input_dir` + 實際檔案名）
 - ❌ `field_widths`：改用 `field_definitions.field_length` 記錄
-- ❌ `spec_code`：改為 `source`（紀錄檔案來源，可為空）
 
 **保留理由**：
-- ✅ `file_name`：唯一識別檔案
 - ✅ `delimiter`：分隔符號格式需要
 - ✅ `source`：記錄檔案來源（選填），便於追蹤
+
+**使用範例**：
+- NAS 有檔案 `customer20251206001.txt`
+- 系統掃描到該檔案，提取前綴 `customer`（匹配非數字部分）
+- 從資料庫查詢 `file_prefix = 'customer'` 的主檔規格
+- 根據查詢到的規格解析檔案內容
 
 ---
 
@@ -145,7 +141,7 @@ CREATE INDEX idx_file_records_created_at ON file_records(created_at);
 ```sql
 CREATE TABLE field_definitions (
     id BIGSERIAL PRIMARY KEY,
-    file_record_id BIGINT NOT NULL REFERENCES file_records(id) ON DELETE CASCADE,
+    file_spec_id BIGINT NOT NULL REFERENCES file_specifications(id) ON DELETE CASCADE,
     field_name VARCHAR(100) NOT NULL,                -- 欄位名稱
     field_order INT NOT NULL,                        -- 欄位順序（從 1 開始）
     data_type VARCHAR(20) NOT NULL,                  -- 資料類型
@@ -155,12 +151,12 @@ CREATE TABLE field_definitions (
     
     CONSTRAINT chk_data_type CHECK (data_type IN ('string', 'int', 'double', 'timestamp')),
     CONSTRAINT chk_field_order_positive CHECK (field_order > 0),
-    UNIQUE (file_record_id, field_order)             -- 同一檔案的欄位順序唯一
+    UNIQUE (file_spec_id, field_order)               -- 同一主檔規格的欄位順序唯一
 );
 
 -- 索引
-CREATE INDEX idx_field_definitions_file_record ON field_definitions(file_record_id);
-CREATE INDEX idx_field_definitions_order ON field_definitions(file_record_id, field_order);
+CREATE INDEX idx_field_definitions_file_spec ON field_definitions(file_spec_id);
+CREATE INDEX idx_field_definitions_order ON field_definitions(file_spec_id, field_order);
 ```
 
 ### 欄位說明
@@ -168,7 +164,7 @@ CREATE INDEX idx_field_definitions_order ON field_definitions(file_record_id, fi
 | 欄位 | 類型 | 必填 | 說明 | 範例 |
 |-----|------|------|------|------|
 | id | BIGSERIAL | ✓ | 主鍵 | 1 |
-| file_record_id | BIGINT | ✓ | 關聯的檔案記錄 ID | 1 |
+| file_spec_id | BIGINT | ✓ | 關聯的主檔規格 ID | 1 |
 | field_name | VARCHAR(100) | ✓ | 欄位名稱 | `customer_id` |
 | field_order | INT | ✓ | 欄位順序 | 1 |
 | data_type | VARCHAR(20) | ✓ | 資料類型 | `string`, `int`, `double`, `timestamp` |
@@ -216,15 +212,15 @@ wcswidth("張三        ") == 10  # True
 ## 3. 任務表（file_tasks）
 
 ### 用途
-記錄每個檔案的處理任務，包含狀態、執行時間、錯誤訊息與重試關聯。
+記錄每個實際檔案的處理任務，包含狀態、執行時間、錯誤訊息與重試關聯。每筆記錄代表從 NAS 掃描到的一個實際檔案的處理任務，關聯到對應的主檔規格。
 
 ### 表結構
 
 ```sql
 CREATE TABLE file_tasks (
     task_id VARCHAR(50) PRIMARY KEY,                 -- 任務 ID（格式：transformat_YYYYMMDD0001）
-    file_record_id BIGINT NOT NULL REFERENCES file_records(id),
-    file_name VARCHAR(255) NOT NULL,                 -- 冗餘儲存，便於查詢
+    file_spec_id BIGINT NOT NULL REFERENCES file_specifications(id),
+    file_name VARCHAR(255) NOT NULL,                 -- 實際檔案名稱（例如 customer_20251206_001.txt）
     status VARCHAR(20) NOT NULL DEFAULT 'pending',   -- 任務狀態
     started_at TIMESTAMP,                            -- 開始處理時間
     completed_at TIMESTAMP,                          -- 完成時間
@@ -236,7 +232,7 @@ CREATE TABLE file_tasks (
 
 -- 索引
 CREATE INDEX idx_file_tasks_status ON file_tasks(status);
-CREATE INDEX idx_file_tasks_file_record ON file_tasks(file_record_id);
+CREATE INDEX idx_file_tasks_file_spec ON file_tasks(file_spec_id);
 CREATE INDEX idx_file_tasks_started_at ON file_tasks(started_at);
 CREATE INDEX idx_file_tasks_file_name ON file_tasks(file_name);
 ```
@@ -245,16 +241,21 @@ CREATE INDEX idx_file_tasks_file_name ON file_tasks(file_name);
 
 | 欄位 | 類型 | 必填 | 說明 | 範例 |
 |-----|------|------|------|------|
-| task_id | VARCHAR(50) | ✓ | 任務 ID（主鍵） | `transformat_202512020001` |
-| file_record_id | BIGINT | ✓ | 關聯的檔案記錄 ID | 1 |
-| file_name | VARCHAR(255) | ✓ | 檔案名稱（冗餘） | `customer_20251202.txt` |
+| task_id | VARCHAR(50) | ✓ | 任務 ID（主鍵） | `transformat_202512060001` |
+| file_spec_id | BIGINT | ✓ | 關聯的主檔規格 ID | 1 |
+| file_name | VARCHAR(255) | ✓ | 實際檔案名稱 | `customer20251206001.txt` |
 | status | VARCHAR(20) | ✓ | 任務狀態 | `pending`, `processing`, `completed`, `failed` |
-| started_at | TIMESTAMP | 選填 | 開始處理時間 | `2025-12-02 10:00:00` |
-| completed_at | TIMESTAMP | 選填 | 完成時間 | `2025-12-02 10:05:30` |
+| started_at | TIMESTAMP | 選填 | 開始處理時間 | `2025-12-06 10:00:00` |
+| completed_at | TIMESTAMP | 選填 | 完成時間 | `2025-12-06 10:05:30` |
 | error_message | TEXT | 選填 | 錯誤訊息 | `編碼錯誤：無法解碼 big5 格式` |
-| previous_failed_task_id | VARCHAR(50) | 選填 | 前一次失敗的任務 ID | `transformat_202512010005` |
+| previous_failed_task_id | VARCHAR(50) | 選填 | 前一次失敗的任務 ID | `transformat_202512050005` |
 
 ### 設計說明
+
+**重要變更**：
+- ✅ `file_spec_id`：關聯到主檔規格表，不是 file_records
+- ✅ `file_name`：儲存實際檔案名稱（完整名稱，包含日期和序號）
+- ✅ 每次從 NAS 掃描到檔案，都會建立新的 task 記錄
 
 **移除項目**：
 - ❌ `processing_pod`：K8s CronJob 環境下無需記錄
@@ -266,6 +267,12 @@ CREATE INDEX idx_file_tasks_file_name ON file_tasks(file_name);
 **保留理由**：
 - ✅ `previous_failed_task_id`：追蹤重試歷史
 - ✅ `error_message`：錯誤排查必要資訊
+
+**使用範例**：
+- 系統掃描 NAS 發現檔案 `customer20251206001.txt`
+- 透過前綴 `customer` 查詢到主檔規格 ID = 1
+- 建立任務記錄：`file_spec_id=1`, `file_name='customer20251206001.txt'`
+- 處理完成後更新狀態為 `completed`
 
 ---
 
@@ -387,24 +394,24 @@ CREATE UNIQUE INDEX idx_task_sequences_date ON task_sequences(sequence_date);
 -- 假資料插入
 -- =====================================================
 
--- 插入檔案記錄 - 分隔符號格式（big5）
-INSERT INTO file_records (file_name, source, encoding, format_type, delimiter) VALUES
-('customer_20251206_001.txt', 'NAS-A', 'big5', 'delimited', '||');
+-- 插入主檔規格 - 分隔符號格式（big5）
+INSERT INTO file_specifications (file_prefix, source, encoding, format_type, delimiter) VALUES
+('customer', 'NAS-A', 'big5', 'delimited', '||');
 
--- 插入欄位定義 - customer_20251206_001.txt
-INSERT INTO field_definitions (file_record_id, field_name, field_order, data_type, transform_type) VALUES
+-- 插入欄位定義 - customer 規格
+INSERT INTO field_definitions (file_spec_id, field_name, field_order, data_type, transform_type) VALUES
 (1, 'customer_id', 1, 'string', 'plain'),
 (1, 'customer_name', 2, 'string', 'mask'),
 (1, 'id_number', 3, 'string', 'mask'),
 (1, 'birth_date', 4, 'timestamp', 'plain'),
 (1, 'account_balance', 5, 'double', 'encrypt');
 
--- 插入檔案記錄 - 固定長度格式（utf-8）
-INSERT INTO file_records (file_name, source, encoding, format_type) VALUES
-('transaction_20251206_001.txt', 'SFTP-Server-1', 'utf-8', 'fixed_length');
+-- 插入主檔規格 - 固定長度格式（utf-8）
+INSERT INTO file_specifications (file_prefix, source, encoding, format_type) VALUES
+('transaction', 'SFTP-Server-1', 'utf-8', 'fixed_length');
 
--- 插入欄位定義 - transaction_20251206_001.txt（固定長度，使用顯示寬度）
-INSERT INTO field_definitions (file_record_id, field_name, field_order, data_type, field_length, transform_type) VALUES
+-- 插入欄位定義 - transaction 規格（固定長度，使用顯示寬度）
+INSERT INTO field_definitions (file_spec_id, field_name, field_order, data_type, field_length, transform_type) VALUES
 (2, 'transaction_id', 1, 'string', 10, 'plain'),        -- 顯示寬度 10
 (2, 'customer_name', 2, 'string', 10, 'mask'),          -- 顯示寬度 10（中文 2 個字 + 空白）
 (2, 'amount', 3, 'double', 12, 'plain'),                -- 顯示寬度 12
@@ -415,27 +422,27 @@ INSERT INTO field_definitions (file_record_id, field_name, field_order, data_typ
 INSERT INTO task_sequences (sequence_date, current_value) VALUES
 ('2025-12-06', 3);
 
--- 插入任務記錄 - 已完成
+-- 插入任務記錄 - 已完成（對應實際檔案 customer20251206001.txt）
 INSERT INTO file_tasks (
-    task_id, file_record_id, file_name, status, 
+    task_id, file_spec_id, file_name, status, 
     started_at, completed_at
 ) VALUES (
     'transformat_202512060001',
     1,
-    'customer_20251206_001.txt',
+    'customer20251206001.txt',
     'completed',
     '2025-12-06 10:00:00',
     '2025-12-06 10:05:30'
 );
 
--- 插入任務記錄 - 失敗
+-- 插入任務記錄 - 失敗（對應實際檔案 transaction20251206001.txt）
 INSERT INTO file_tasks (
-    task_id, file_record_id, file_name, status, 
+    task_id, file_spec_id, file_name, status, 
     started_at, completed_at, error_message
 ) VALUES (
     'transformat_202512060002',
     2,
-    'transaction_20251206_001.txt',
+    'transaction20251206001.txt',
     'failed',
     '2025-12-06 10:10:00',
     '2025-12-06 10:10:15',
@@ -444,12 +451,12 @@ INSERT INTO file_tasks (
 
 -- 插入任務記錄 - 重試（關聯到前一次失敗的任務）
 INSERT INTO file_tasks (
-    task_id, file_record_id, file_name, status, 
+    task_id, file_spec_id, file_name, status, 
     previous_failed_task_id
 ) VALUES (
     'transformat_202512060003',
     2,
-    'transaction_20251206_001.txt',
+    'transaction20251206001.txt',
     'pending',
     'transformat_202512060002'
 );
@@ -457,7 +464,7 @@ INSERT INTO file_tasks (
 
 ### 原始測試檔案內容
 
-#### customer_20251206_001.txt（big5 編碼，分隔符號格式）
+#### customer20251206001.txt（big5 編碼，分隔符號格式）
 
 ```text
 A001||張三||A123456789||19800101||50000.50
@@ -465,7 +472,7 @@ A002||李四||B987654321||19900215||75000.00
 A003||王五||C111222333||19850620||60000.25
 ```
 
-#### transaction_20251206_001.txt（utf-8 編碼，固定長度格式）
+#### transaction20251206001.txt（utf-8 編碼，固定長度格式）
 
 ```text
 TXN0000001張三        000050000.5020251206DONE 
@@ -484,31 +491,25 @@ TXN0000003王小明      000060000.2520251206PEND
 
 ## 6. 查詢範例
 
-### 查詢待處理的檔案
+### 查詢主檔規格與欄位定義
 
 ```sql
--- 查詢來自特定來源且尚未處理的檔案
+-- 根據檔案前綴查詢主檔規格
 SELECT 
-    fr.id,
-    fr.file_name,
-    fr.encoding,
-    fr.format_type,
-    fr.delimiter
-FROM file_records fr
-WHERE fr.source = 'NAS-A'  -- 可選：依來源篩選
-  AND NOT EXISTS (
-      SELECT 1 
-      FROM file_tasks ft 
-      WHERE ft.file_record_id = fr.id 
-        AND ft.status IN ('pending', 'processing', 'completed')
-  )
-ORDER BY fr.created_at ASC;
+    fs.id,
+    fs.file_prefix,
+    fs.encoding,
+    fs.format_type,
+    fs.delimiter,
+    fs.source
+FROM file_specifications fs
+WHERE fs.file_prefix = 'customer';
 ```
 
-### 查詢檔案的欄位定義
+### 查詢主檔規格的欄位定義
 
 ```sql
--- 查詢特定檔案的欄位定義（按順序）
+-- 查詢特定主檔規格的欄位定義（按順序）
 SELECT 
     field_name,
     field_order,
@@ -516,7 +517,7 @@ SELECT
     field_length,
     transform_type
 FROM field_definitions
-WHERE file_record_id = 1
+WHERE file_spec_id = 1
 ORDER BY field_order ASC;
 ```
 
@@ -527,7 +528,8 @@ ORDER BY field_order ASC;
 SELECT 
     status,
     COUNT(*) as task_count,
-    COUNT(DISTINCT file_record_id) as unique_files
+    COUNT(DISTINCT file_spec_id) as unique_specs,
+    COUNT(DISTINCT file_name) as unique_files
 FROM file_tasks
 WHERE started_at >= CURRENT_DATE OR (status = 'pending' AND task_id LIKE 'transformat_' || TO_CHAR(CURRENT_DATE, 'YYYYMMDD') || '%')
 GROUP BY status
@@ -554,6 +556,34 @@ ORDER BY t1.completed_at DESC;
 ---
 
 ## 7. 設計決策說明
+
+### 核心設計變更：從「待處理檔案清單」改為「主檔規格配置」
+
+**原設計問題**：
+- `file_records` 表儲存待處理的個別檔案資訊
+- 系統從資料庫讀取待處理檔案清單進行處理
+- **錯誤**：實際上檔案每天上傳到 NAS，不是事先存在資料庫中
+
+**正確設計**：
+- `file_specifications` 表儲存**檔案類型的解析規格**（主檔規格）
+- 主檔規格在服務啟動前透過 SQL 腳本建立（不是運行時動態新增）
+- 系統流程：
+  1. 掃描 NAS 目錄獲取實際檔案清單
+  2. 提取檔案前綴（如 `customer_20251206_001.txt` → `customer_`）
+  3. 從資料庫查詢匹配的主檔規格
+  4. 根據規格解析檔案並建立 `file_tasks` 記錄
+
+**範例場景**：
+```
+資料庫預先建立：
+- file_specifications: file_prefix='customer', encoding='big5', delimiter='||'
+- file_specifications: file_prefix='transaction', encoding='utf-8', format_type='fixed_length'
+
+每天 NAS 收到：
+- customer20251206001.txt  → 比對到 customer 規格
+- transaction20251206001.txt → 比對到 transaction 規格
+- unknown20251206001.txt → 無匹配規格，記錄警告並跳過
+```
 
 ### 為何移除 `file_records.field_widths`？
 

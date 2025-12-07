@@ -1,8 +1,8 @@
 # Quick Start：BOA 批次轉檔服務
 
 **專案**：boa-bch-transformat  
-**版本**：2.0（修正版）  
-**日期**：2025-12-06  
+**版本**：4.0  
+**日期**：2025-12-07  
 **狀態**：開發中
 
 ---
@@ -19,15 +19,22 @@
 ### 依賴套件
 
 ```text
-pyarrow>=18.0.0          # 串流處理與 Parquet 轉換
-psycopg2-binary>=2.9.9   # PostgreSQL 連線池
-paramiko>=3.5.0          # SFTP 檔案存取
-requests>=2.32.0         # HTTP API 呼叫
-tenacity>=9.0.0          # 重試機制
-loguru>=0.7.0            # 結構化日誌
-wcwidth>=0.2.13          # 顯示寬度計算（固定長度欄位）
-pytest>=8.3.0            # 測試框架
-pytest-mock>=3.14.0      # Mock 支援
+# 核心依賴
+pyarrow==14.0.1          # Parquet 處理
+psycopg2-binary==2.9.9   # PostgreSQL 連接
+paramiko==3.4.0          # SFTP 連線
+requests==2.31.0         # HTTP 請求
+loguru==0.7.2            # 日誌記錄
+wcwidth==0.2.12          # 字元寬度計算
+tenacity==8.2.3          # 重試機制
+
+# 開發工具
+ruff==0.1.8              # 程式碼品質檢查
+
+# 測試工具
+pytest==7.4.3            # 測試框架
+pytest-cov==4.1.0        # 覆蓋率測試
+pytest-mock==3.12.0      # Mock 工具
 ```
 
 ---
@@ -75,15 +82,15 @@ CREATE DATABASE boa_transform_db;
 ### 3.2 初始化資料表
 
 ```bash
-# 執行初始化腳本
-psql -U postgres -d boa_transform_db -f .specify/scripts/sql/init-db.sql
+# 執行 DDL 腳本（建立表結構）
+psql -U postgres -d boa_transform_db -f scripts/ddl.sql
 ```
 
-### 3.3 匯入假資料（選用）
+### 3.3 匯入測試資料（選用）
 
 ```bash
-# 匯入假資料
-psql -U postgres -d boa_transform_db -f .specify/scripts/sql/sample-data.sql
+# 執行 DML 腳本（匯入測試資料）
+psql -U postgres -d boa_transform_db -f scripts/dml.sql
 ```
 
 ---
@@ -160,28 +167,90 @@ export SFTP_HOST=nas.prod.example.com
 
 ```bash
 # 啟動服務（單次執行）
-python src/main.py
+python main.py
 
 # 或使用環境變數
-ENV=local python src/main.py
+ENV=local python main.py
 ```
 
-### 5.2 測試模式
+### 5.2 程式碼品質檢查
+
+使用 **ruff** 進行程式碼品質檢查：
+
+```bash
+# 檢查程式碼
+ruff check src/ tests/
+
+# 自動修正問題
+ruff check --fix src/ tests/
+
+# 格式化程式碼
+ruff format src/ tests/
+```
+
+### 5.3 測試模式
 
 ```bash
 # 執行單元測試
 pytest tests/unit -v
 
-# 執行整合測試
-pytest tests/integration -v
+# 執行單元測試（僅標記為 unit 的測試）
+pytest -m unit -v
 
 # 產生測試覆蓋率報告
-pytest --cov=src --cov-report=html tests/
+pytest --cov=src --cov-report=html --cov-report=term-missing tests/
+
+# 覆蓋率必須達到 80%
+pytest --cov=src --cov-fail-under=80 tests/
 ```
+
+**注意**：本專案不包含整合測試，僅撰寫單元測試。
 
 ---
 
-## 6. 常見場景
+## 6. 日誌配置
+
+### 6.1 日誌格式
+
+本專案使用 **loguru** 日誌系統，支援多環境格式：
+
+**Local 環境**（開發用）：
+```
+2025-12-07 10:30:15 | INFO     | file_processor:process_file:45 - 開始處理檔案: customer20251206001.txt
+2025-12-07 10:30:16 | DEBUG    | parser_service:parse_delimited:28 - 解析分隔符號格式，分隔符號: ||
+2025-12-07 10:30:18 | ERROR    | sftp_client:download_file:67 - SFTP 連線失敗: Connection timeout
+```
+
+**其他環境**（UT/UAT/PROD）：
+```json
+{"text": "開始處理檔案: customer20251206001.txt", "record": {"time": {"repr": "2025-12-07 10:30:15", "timestamp": 1733544615.0}, "level": {"name": "INFO", "no": 20}, "message": "開始處理檔案: customer20251206001.txt"}}
+```
+
+### 6.2 設定日誌環境
+
+透過環境變數設定：
+
+```bash
+# Local 環境（一般文字格式）
+export ENV=local
+python main.py
+
+# 其他環境（JSON 格式）
+export ENV=ut    # 或 uat, prod
+python main.py
+```
+
+### 6.3 日誌級別
+
+- **DEBUG**：本地開發除錯（僅 local 環境）
+- **INFO**：一般資訊（任務狀態、處理進度）
+- **WARNING**：警告訊息（記憶體接近上限、Lock 競爭）
+- **ERROR**：錯誤訊息（處理失敗、連線錯誤）
+- **CRITICAL**：嚴重錯誤（系統無法啟動）
+
+---
+
+## 7. 常見場景
 
 ### 6.1 新增檔案定義
 

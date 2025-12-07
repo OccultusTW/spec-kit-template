@@ -1,11 +1,13 @@
 # 實作計劃：BOA 批次轉檔服務
 
-**分支**：`001-boa-bch-transformat` | **日期**：2025-12-02 | **規格**：[spec.md](./spec.md)
+**分支**：`001-boa-bch-transformat` | **日期**：2025-12-07 | **版本**：4.0 | **規格**：[spec.md](./spec.md)
 **輸入**：來自 `/specs/001-boa-bch-transformat/spec.md` 的功能規格
 
 ## 摘要
 
-本專案開發一個批次轉檔服務，負責將儲存於 NAS 的文字檔案（txt）轉換為 parquet 格式。服務需支援多種編碼（big5、utf-8）與資料格式（分隔符號、固定長度），並在 Kubernetes 多 pod 環境下運行，使用 PostgreSQL advisory lock 確保檔案不重複處理。轉換完成後呼叫下游遮罩轉換服務，具備重試機制提升可靠性。採用串流處理方式確保大型檔案（>1GB）能在記憶體限制（2GB）內正確處理。
+本專案開發一個批次轉檔服務，負責掃描 NAS 目錄中的文字檔案（txt），透過檔案前綴查詢資料庫中預先建立的主檔規格，並轉換為 parquet 格式。服務需支援多種編碼（big5、utf-8）與資料格式（分隔符號、固定長度），並在 Kubernetes 多 pod 環境下運行，使用 PostgreSQL advisory lock 確保檔案不重複處理。轉換完成後呼叫下游遮罩轉換服務，具備重試機制提升可靠性。採用串流處理方式確保大型檔案（>1GB）能在記憶體限制（2GB）內正確處理。
+
+**核心流程變更**：系統從 NAS 掃描檔案並比對主檔規格，而非從資料庫讀取待處理檔案清單。
 
 ## 技術背景
 
@@ -15,17 +17,25 @@
   - psycopg2：PostgreSQL 資料庫連接，建立連線池
   - paramiko：SFTP 連線至 NAS 讀取檔案
   - requests：呼叫下游 API 服務
-  - loguru：日誌記錄
+  - loguru：日誌記錄（支援多環境格式設定）
+  - wcwidth：計算字元顯示寬度（處理固定長度格式）
+  - tenacity：API 重試機制
+  - ruff：程式碼品質檢查工具
+  - pytest：單元測試框架
+  - pytest-cov：測試覆蓋率工具
+  - pytest-mock：測試 mock 工具
 
 **儲存**：PostgreSQL（任務記錄、序列管理、advisory lock）  
-**測試**：pytest（單元測試、整合測試）  
+**測試**：pytest + pytest-cov + pytest-mock（單元測試）  
 **目標平台**：Kubernetes 環境（Linux 容器）  
-**專案類型**：標準應用程式型 - 批次處理服務  
+**專案類型**：標準應用程式型 - 批次處理服務（K8s CronJob）  
 **效能目標**：單一檔案（1GB）處理時間 < 10 分鐘，支援串流處理避免記憶體溢位  
 **限制**：記憶體使用 < 2GB，多 pod 並行無重複處理  
 **規模/範圍**：支援大型檔案處理（>1GB），多 pod 並行環境
 
-**環境區分**：local、ut、uat、prod（所有環境參數配置一致）
+**環境區分**：local、ut、uat、prod
+  - 所有環境參數配置一致
+  - **Log 格式**：local 使用一般文字，其他環境使用 JSON
 
 ## 章程檢查
 
@@ -141,52 +151,54 @@ specs/001-boa-bch-transformat/
 ```text
 boa-bch-transformat/
 ├── .venv/                      # Python 虛擬環境
+├── main.py                     # 應用程式入口點（與 spec 同名目錄下）
 ├── src/
-│   └── transformat/
+│   ├── __init__.py
+│   ├── config/
+│   │   ├── __init__.py
+│   │   └── settings.py         # 環境配置（local/ut/uat/prod）
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── file_spec.py        # 主檔規格實體
+│   │   ├── field_definition.py # 欄位定義實體
+│   │   ├── file_task.py        # 檔案任務實體
+│   │   └── task_sequence.py    # 任務序列實體
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── file_scanner.py     # NAS 檔案掃描服務
+│   │   ├── file_processor.py   # 檔案處理服務（主要業務邏輯）
+│   │   ├── sftp_client.py      # SFTP 檔案讀取服務
+│   │   ├── parser_service.py   # 資料解析服務（分隔符號/固定長度）
+│   │   ├── parquet_writer.py   # Parquet 寫入服務（串流處理）
+│   │   ├── downstream_api.py   # 下游服務呼叫（重試機制）
+│   │   └── lock_manager.py     # Advisory Lock 管理服務
+│   ├── repositories/
+│   │   ├── __init__.py
+│   │   ├── file_spec_repo.py       # 主檔規格資料庫操作
+│   │   ├── field_definition_repo.py # 欄位定義資料庫操作
+│   │   ├── file_task_repo.py       # 檔案任務資料庫操作
+│   │   └── task_sequence_repo.py   # 任務序列資料庫操作
+│   ├── utils/
+│   │   ├── __init__.py
+│   │   ├── encoding_detector.py # 編碼偵測工具
+│   │   ├── logger.py            # Loguru 日誌設定
+│   │   ├── type_converter.py    # 資料類型轉換工具
+│   │   └── db_connection.py     # 資料庫連線池管理
+│   └── exceptions/
 │       ├── __init__.py
-│       ├── main.py             # 應用程式入口點
-│       ├── config/
-│       │   ├── __init__.py
-│       │   └── settings.py     # 環境配置（local/ut/uat/prod）
-│       ├── models/
-│       │   ├── __init__.py
-│       │   ├── file_record.py  # 檔案記錄實體
-│       │   ├── field_definition.py  # 欄位定義實體
-│       │   └── task_sequence.py     # 任務序列實體
-│       ├── services/
-│       │   ├── __init__.py
-│       │   ├── file_processor.py    # 檔案處理服務（主要業務邏輯）
-│       │   ├── sftp_reader.py       # SFTP 檔案讀取服務
-│       │   ├── parser_service.py    # 資料解析服務（分隔符號/固定長度）
-│       │   ├── parquet_writer.py    # Parquet 寫入服務（串流處理）
-│       │   ├── downstream_caller.py # 下游服務呼叫（重試機制）
-│       │   └── lock_manager.py      # Advisory Lock 管理服務
-│       ├── repositories/
-│       │   ├── __init__.py
-│       │   ├── file_record_repo.py  # 檔案記錄資料庫操作
-│       │   └── task_sequence_repo.py # 任務序列資料庫操作
-│       ├── utils/
-│       │   ├── __init__.py
-│       │   ├── encoding_detector.py # 編碼偵測工具
-│       │   ├── logger.py            # Loguru 日誌設定
-│       │   └── db_connection.py     # 資料庫連線池管理
-│       └── exceptions/
-│           ├── __init__.py
-│           ├── base.py              # 基礎異常類別（BaseTransformatException, ErrorCategory）
-│           └── custom.py            # 自定義異常（SystemException, ProcessingException）
+│       ├── base.py              # 基礎異常類別
+│       └── custom.py            # 自定義異常
 ├── tests/
 │   ├── __init__.py
 │   ├── unit/
 │   │   ├── test_parser_service.py
 │   │   ├── test_encoding_detector.py
+│   │   ├── test_type_converter.py
 │   │   └── test_lock_manager.py
-│   ├── integration/
-│   │   ├── test_file_processor.py
-│   │   ├── test_sftp_reader.py
-│   │   └── test_downstream_caller.py
 │   └── fixtures/
-│       ├── sample_delimited_big5.txt
-│       ├── sample_fixed_length_utf8.txt
+│       ├── sample_files/
+│       │   ├── customer20251206001.txt      # big5 分隔符號格式
+│       │   └── transaction20251206001.txt   # utf-8 固定長度格式
 │       └── sample_spec_config.json
 ├── resources/
 │   └── env/
@@ -194,24 +206,26 @@ boa-bch-transformat/
 │       ├── ut.env
 │       ├── uat.env
 │       └── prod.env
-├── docs/
-│   └── architecture.md          # 架構說明文件
 ├── scripts/
-│   ├── init_db.sql              # 資料庫初始化腳本
-│   └── setup_venv.sh            # 虛擬環境設置腳本
+│   ├── ddl.sql                  # 資料庫結構定義（DDL）
+│   └── dml.sql                  # 測試資料匯入（DML）
 ├── requirements.txt             # Python 依賴清單
-├── pyproject.toml               # 專案配置
+├── pyproject.toml               # 專案配置（包含 ruff 設定）
 ├── .gitignore
 └── README.md
 ```
 
 **結構決策**：
 - 採用**標準應用程式型**架構，因為這是一個批次處理應用程式，不是 Web API 服務
-- 使用 `src/transformat/` 作為主要應用程式模組，遵循 Python 最佳實踐
+- **移除 `src/transformat/` 層級**，直接使用 `src/` 作為主要模組目錄，避免多餘嵌套
+- **`main.py` 放在專案根目錄**，與 spec 同名目錄下，不在 src 內
+- **移除 `docs/` 和 `k8s/` 資料夾**，不需要額外文件與部署設定
+- **SQL 腳本分離**：`scripts/ddl.sql`（表結構）和 `scripts/dml.sql`（測試資料）
 - 清晰分離 models（實體）、services（業務邏輯）、repositories（資料存取）、utils（工具函數）
-- 建立獨立的 exceptions 模組管理自訂異常
-- 使用 resource/env/ 目錄管理多環境配置（位於專案根目錄，不在 src 內）
-- 測試分為 unit（單元測試）與 integration（整合測試），並提供測試資料 fixtures
+- 使用 `resources/env/` 目錄管理多環境配置（位於專案根目錄）
+- **只保留單元測試**，移除整合測試，使用 pytest-cov 和 pytest-mock
+- **使用 ruff 進行程式碼品質檢查**，配置在 pyproject.toml
+- **日誌輸出格式**：local 環境使用一般文字格式，其他環境使用 JSON 格式
 
 ## 技術背景 - 需要釐清的項目
 
@@ -1236,6 +1250,172 @@ if __name__ == "__main__":
 - [ ] 錯誤訊息是否避免暴露敏感資訊（密碼、token）？
 
 **參考**：constitution.md §原則 7（錯誤處理優先）
+
+---
+
+## 工具配置
+
+### Ruff 程式碼品質檢查
+
+專案使用 **ruff** 進行程式碼品質檢查，配置於 `pyproject.toml`：
+
+```toml
+[tool.ruff]
+# 基本配置
+line-length = 100
+target-version = "py313"
+
+# 啟用的規則（使用基本規則集）
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+]
+
+# 忽略的規則
+ignore = [
+    "E501",  # line too long (已設定 line-length)
+]
+
+# 排除的目錄
+exclude = [
+    ".venv",
+    "__pycache__",
+    "*.pyc",
+]
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401"]  # 允許 __init__.py 中的未使用 import
+```
+
+**使用方式**：
+- 檢查程式碼：`ruff check src/ tests/`
+- 自動修正：`ruff check --fix src/ tests/`
+- 格式化程式碼：`ruff format src/ tests/`
+
+**實作要求**：
+- 實作階段執行 ruff 檢查後，必須處理所有錯誤和警告
+- 使用基本規則集，不引入過於嚴格的規則
+- 確保程式碼符合 PEP 8 風格指南
+
+---
+
+### Pytest 測試配置
+
+測試框架配置於 `pyproject.toml`：
+
+```toml
+[tool.pytest.ini_options]
+# 測試目錄
+testpaths = ["tests"]
+
+# Python 路徑
+pythonpath = ["src"]
+
+# 測試輸出選項
+addopts = [
+    "-v",                          # 詳細輸出
+    "--strict-markers",            # 嚴格檢查 markers
+    "--cov=src",                   # 覆蓋率測試
+    "--cov-report=term-missing",   # 顯示未覆蓋的行
+    "--cov-report=html",           # 生成 HTML 報告
+    "--cov-fail-under=80",         # 覆蓋率低於 80% 失敗
+]
+
+# Markers 定義
+markers = [
+    "unit: 單元測試",
+]
+```
+
+**測試覆蓋率目標**：> 80%
+
+**測試範圍**：
+- ✅ 單元測試：測試個別模組與函數
+- ❌ 整合測試：不需要撰寫
+
+**使用工具**：
+- pytest：測試框架
+- pytest-cov：覆蓋率測試
+- pytest-mock：Mock 外部依賴
+
+---
+
+### Loguru 日誌配置
+
+日誌系統使用 **loguru**，支援多環境格式配置：
+
+```python
+# src/utils/logger.py
+import os
+import sys
+from loguru import logger
+
+def setup_logger():
+    """設定日誌系統，根據環境變數決定輸出格式"""
+    # 移除預設 handler
+    logger.remove()
+    
+    # 取得環境變數
+    env = os.getenv("ENV", "local").lower()
+    
+    if env == "local":
+        # 開發環境：一般文字格式
+        logger.add(
+            sys.stderr,
+            format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+            level="DEBUG",
+        )
+    else:
+        # 其他環境（ut/uat/prod）：JSON 格式
+        logger.add(
+            sys.stderr,
+            format="{message}",
+            level="INFO",
+            serialize=True,  # 輸出為 JSON
+        )
+    
+    return logger
+```
+
+**日誌格式說明**：
+- **local 環境**：易讀的文字格式，包含時間、級別、位置、訊息
+- **其他環境**：JSON 格式，便於 Graylog 解析與查詢
+
+**日誌級別**：
+- DEBUG：本地開發除錯
+- INFO：一般資訊（任務狀態、處理進度）
+- WARNING：警告訊息（記憶體接近上限、Lock 競爭）
+- ERROR：錯誤訊息（處理失敗、連線錯誤）
+- CRITICAL：嚴重錯誤（系統無法啟動）
+
+---
+
+## 依賴清單
+
+完整的 `requirements.txt`：
+
+```txt
+# 核心依賴
+pyarrow==14.0.1          # Parquet 處理
+psycopg2-binary==2.9.9   # PostgreSQL 連接
+paramiko==3.4.0          # SFTP 連線
+requests==2.31.0         # HTTP 請求
+loguru==0.7.2            # 日誌記錄
+wcwidth==0.2.12          # 字元寬度計算
+tenacity==8.2.3          # 重試機制
+
+# 開發工具
+ruff==0.1.8              # 程式碼品質檢查
+
+# 測試工具
+pytest==7.4.3            # 測試框架
+pytest-cov==4.1.0        # 覆蓋率測試
+pytest-mock==3.12.0      # Mock 工具
+```
 
 ---
 
