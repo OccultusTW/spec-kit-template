@@ -22,27 +22,24 @@
 
 ```
     project/
+    ├── main.py
     ├── src/
-    │   └── myapp/
+    │   ├── __init__.py
+    │   ├── config/
+    │   │   ├── __init__.py
+    │   │   └── settings.py
+    │   ├── models/
+    │   │   ├── __init__.py
+    │   │   └── domain.py
+    │   ├── services/
+    │   │   ├── __init__.py
+    │   │   └── business_logic.py
+    │   └── utils/
     │       ├── __init__.py
-    │       ├── main.py
-    │       ├── config/
-    │       │   ├── __init__.py
-    │       │   └── settings.py
-    │       ├── models/
-    │       │   ├── __init__.py
-    │       │   └── domain.py
-    │       ├── services/
-    │       │   ├── __init__.py
-    │       │   └── business_logic.py
-    │       └── utils/
-    │           ├── __init__.py
-    │           └── helpers.py
+    │       └── helpers.py
     ├── tests/
     │   ├── __init__.py
     │   ├── unit/
-    │   └── integration/
-    ├── docs/
     ├── requirements.txt
     ├── pyproject.toml
     └── README.md

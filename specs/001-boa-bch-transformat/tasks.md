@@ -29,11 +29,11 @@ description: "BOA 批次轉檔服務實作任務清單"
 
 **目的**：專案初始化和基本結構
 
-- [ ] T001 建立專案目錄結構（依照 plan.md §專案結構）
-- [ ] T002 初始化 Python 3.13 虛擬環境（.venv）
-- [ ] T003 [P] 建立 requirements.txt（pyarrow, psycopg2, paramiko, requests, loguru, wcwidth, tenacity）
-- [ ] T004 [P] 配置環境檔案（resources/env/local.env, ut.env, uat.env, prod.env）
-- [ ] T005 [P] 建立 .gitignore（排除 .venv, *.pyc, __pycache__, .env）
+- [X] T001 建立專案目錄結構（依照 plan.md §專案結構）
+- [X] T002 初始化 Python 3.13 虛擬環境（.venv）
+- [X] T003 [P] 建立 requirements.txt（pyarrow, psycopg2, paramiko, requests, loguru, wcwidth, tenacity）
+- [X] T004 [P] 配置環境檔案（resources/env/local.env, ut.env, uat.env, prod.env）
+- [X] T005 [P] 建立 .gitignore（排除 .venv, *.pyc, __pycache__, .env）
 
 **檢查點**：執行 `python --version` 確認 3.13，執行 `pip list` 確認所有依賴安裝成功
 
@@ -47,10 +47,10 @@ description: "BOA 批次轉檔服務實作任務清單"
 
 ### 資料庫基礎
 
-- [ ] T006 建立資料庫 schema SQL 腳本（data-model.md 的 4 張表）
-- [ ] T007 [P] 實作 ErrorCode Enum（exceptions/base.py，16 個錯誤定義）
-- [ ] T008 [P] 實作 BaseTransformatException（exceptions/base.py）
-- [ ] T009 [P] 實作 SystemException 和 ProcessingException（exceptions/custom.py）
+- [X] T006 建立資料庫 schema SQL 腳本（data-model.md 的 4 張表）
+- [X] T007 [P] 實作 ErrorCode Enum（exceptions/base.py，16 個錯誤定義）
+- [X] T008 [P] 實作 BaseTransformatException（exceptions/base.py）
+- [X] T009 [P] 實作 SystemException 和 ProcessingException（exceptions/custom.py）
 
 **驗證**：
 ```python
@@ -61,8 +61,8 @@ assert ErrorCode.FILE_NOT_FOUND.format(file_path="/test") == "檔案不存在：
 
 ### 配置與日誌
 
-- [ ] T010 [P] 實作環境配置讀取（config/settings.py，支援 local/ut/uat/prod）
-- [ ] T011 [P] 實作 Loguru 日誌配置（utils/logger.py，JSON 格式）
+- [X] T010 [P] 實作環境配置讀取（config/settings.py，支援 local/ut/uat/prod）
+- [X] T011 [P] 實作 Loguru 日誌配置（utils/logger.py，JSON 格式）
 
 **驗證**：
 ```python
@@ -74,8 +74,8 @@ logger.info("測試訊息")  # 檢查日誌檔案是否產生
 
 ### 資料庫連線
 
-- [ ] T012 實作資料庫連線池（utils/db_connection.py，ThreadedConnectionPool 5-15）
-- [ ] T013 測試連線池基本功能（取得連線、歸還連線、連線池耗盡錯誤）
+- [X] T012 實作資料庫連線池（utils/db_connection.py，ThreadedConnectionPool 5-15）
+- [X] T013 測試連線池基本功能（取得連線、歸還連線、連線池耗盡錯誤）
 
 **驗證**：
 ```python
@@ -89,14 +89,14 @@ pool.closeall()
 
 ### 基礎 Repository
 
-- [ ] T014 [P] 實作 FileRecordRepository 基礎類別（repositories/file_record_repo.py）
+- [X] T014 [P] 實作 FileRecordRepository 基礎類別（repositories/file_record_repo.py）
   - insert_file_record()
   - get_file_record_by_name()
   - list_pending_files()
 
 **驗證**：執行單元測試確認 CRUD 操作正常
 
-- [ ] T015 [P] 實作 TaskSequenceRepository（repositories/task_sequence_repo.py）
+- [X] T015 [P] 實作 TaskSequenceRepository（repositories/task_sequence_repo.py）
   - generate_task_id(date) → transformat_YYYYMMDD0001
   - 使用 SELECT FOR UPDATE 確保並行安全
 
@@ -109,7 +109,7 @@ task_id2 = repo.generate_task_id("20251206")  # transformat_202512060002
 assert task_id1 != task_id2
 ```
 
-- [ ] T016 [P] 實作 FileTaskRepository（repositories/file_task_repo.py）
+- [X] T016 [P] 實作 FileTaskRepository（repositories/file_task_repo.py）
   - create_task(file_record_id, file_name, previous_failed_task_id)
   - update_status(task_id, status, error_message)
   - get_task_by_id(task_id)
@@ -134,7 +134,7 @@ assert task_id1 != task_id2
 
 ### 實作 - SFTP 讀取
 
-- [ ] T017 [P] [US1] 實作 SFTP 連線管理（services/sftp_client.py）
+- [X] T017 [P] [US1] 實作 SFTP 連線管理（services/sftp_client.py）
   - connect_to_sftp() → SFTPClient
   - 拋出 SystemException(ErrorCode.SFTP_AUTH_FAILED)
   - 拋出 SystemException(ErrorCode.SFTP_NETWORK_ERROR)
@@ -153,7 +153,7 @@ except SystemException as e:
     assert e.error_code == ErrorCode.SFTP_AUTH_FAILED
 ```
 
-- [ ] T018 [P] [US1] 實作 SFTP 檔案讀取（services/sftp_client.py）
+- [X] T018 [P] [US1] 實作 SFTP 檔案讀取（services/sftp_client.py）
   - read_file_from_sftp(sftp, file_path, task_id) → bytes
   - 拋出 ProcessingException(ErrorCode.FILE_NOT_FOUND)
   - 拋出 ProcessingException(ErrorCode.FILE_READ_FAILED)
@@ -173,7 +173,7 @@ except ProcessingException as e:
 
 ### 實作 - 編碼偵測
 
-- [ ] T019 [US1] 實作編碼偵測器（utils/encoding_detector.py）
+- [X] T019 [US1] 實作編碼偵測器（utils/encoding_detector.py）
   - detect_encoding(content: bytes, task_id: str) → str
   - 嘗試順序：utf-8 → big5 → gbk
   - 拋出 ProcessingException(ErrorCode.ENCODING_DETECTION_FAILED)
@@ -198,7 +198,7 @@ except ProcessingException as e:
 
 ### 實作 - 資料解析
 
-- [ ] T020 [P] [US1] 實作固定長度解析器（services/parser_service.py）
+- [X] T020 [P] [US1] 實作固定長度解析器（services/parser_service.py）
   - parse_fixed_length_line(line: str, field_defs: list, line_num: int, task_id: str) → dict
   - 使用 wcwidth 計算中文字元寬度
   - 自動 strip() 移除空白
@@ -222,7 +222,7 @@ except ProcessingException as e:
     assert "預期 15" in e.message
 ```
 
-- [ ] T021 [P] [US1] 實作分隔符號解析器（services/parser_service.py）
+- [X] T021 [P] [US1] 實作分隔符號解析器（services/parser_service.py）
   - parse_delimiter_line(line: str, delimiter: str, line_num: int, task_id: str) → list
   - 拋出 ProcessingException(ErrorCode.PARSE_DELIMITER_FAILED)
 
@@ -241,7 +241,7 @@ except ProcessingException as e:
     assert e.error_code == ErrorCode.PARSE_DELIMITER_FAILED
 ```
 
-- [ ] T022 [US1] 實作批次解析器（services/parser_service.py）
+- [X] T022 [US1] 實作批次解析器（services/parser_service.py）
   - parse_file_content(content: str, file_record: FileRecord, task_id: str) → Iterator[dict]
   - 根據 file_record.delimiter 判斷解析方式
   - 使用 yield 返回批次（30,000 行/批）
@@ -259,7 +259,7 @@ assert all('col1' in record for batch in batches for record in batch)
 
 ### 實作 - Parquet 寫入
 
-- [ ] T023 [US1] 實作 Parquet 寫入器（services/parquet_writer.py）
+- [X] T023 [US1] 實作 Parquet 寫入器（services/parquet_writer.py）
   - write_parquet(records: Iterator[dict], output_path: str, schema: list, task_id: str) → None
   - 使用 pyarrow.parquet.ParquetWriter 串流寫入
   - 每 30,000 筆寫入一次
@@ -283,7 +283,7 @@ assert len(table) == 100
 
 ### 整合 - 檔案處理主流程
 
-- [ ] T024 [US1] 實作檔案處理服務（services/file_processor.py）
+- [X] T024 [US1] 實作檔案處理服務（services/file_processor.py）
   - process_file(task_id: str) → None
   - 整合：SFTP 讀取 → 編碼偵測 → 解析 → Parquet 寫入
   - 統一錯誤處理（SystemException / ProcessingException）
@@ -321,7 +321,7 @@ assert os.path.exists(output_path)
 
 ### 實作 - Advisory Lock 管理
 
-- [ ] T025 [P] [US2] 實作 Advisory Lock 管理器（services/lock_manager.py）
+- [X] T025 [P] [US2] 實作 Advisory Lock 管理器（services/lock_manager.py）
   - try_acquire_lock(task_id: str, conn) → bool
   - release_lock(task_id: str, conn) → None
   - 使用 pg_try_advisory_lock(hashtext(task_id))
@@ -345,7 +345,7 @@ assert lock_mgr.try_acquire_lock("test_task", conn2) == True
 
 ### 實作 - 批次處理主流程
 
-- [ ] T026 [US2] 擴展 FileTaskRepository 批次方法
+- [X] T026 [US2] 擴展 FileTaskRepository 批次方法
   - list_pending_tasks(limit: int) → List[dict]
   - 查詢 status='pending' 的任務
 
@@ -361,7 +361,7 @@ assert len(tasks) == 5
 assert all(t['status'] == 'pending' for t in tasks)
 ```
 
-- [ ] T027 [US2] 實作批次處理主程式（main.py）
+- [X] T027 [US2] 實作批次處理主程式（main.py）
   - process_pending_tasks(db_pool, sftp_client) → None
   - 讀取所有 pending 任務
   - 逐一嘗試取得 Advisory Lock
@@ -384,7 +384,7 @@ assert len(completed_tasks) == 5
 
 ### 實作 - 啟動階段錯誤處理
 
-- [ ] T028 [US2] 實作應用程式入口點（main.py）
+- [X] T028 [US2] 實作應用程式入口點（main.py）
   - main() 函數
   - 啟動階段錯誤處理（SystemException → exit 1）
   - 資源清理（finally 區塊）
@@ -416,7 +416,7 @@ python src/transformat/main.py
 
 ### 實作 - 下游 API 呼叫
 
-- [ ] T029 [P] [US3] 實作下游 API 呼叫器（services/downstream_caller.py）
+- [X] T029 [P] [US3] 實作下游 API 呼叫器（services/downstream_caller.py）
   - call_mask_api(task_id: str, parquet_path: str) → dict
   - 使用 requests + tenacity 重試裝飾器
   - 重試策略：3 次，指數退避 1-10 秒
@@ -446,7 +446,7 @@ except ProcessingException as e:
 
 ### 整合 - 加入下游 API 呼叫
 
-- [ ] T030 [US3] 擴展 process_file() 加入下游 API 呼叫
+- [X] T030 [US3] 擴展 process_file() 加入下游 API 呼叫
   - 在 Parquet 寫入成功後呼叫 call_mask_api()
   - 捕捉 API 錯誤並記錄到 file_tasks.error_message
 
@@ -474,7 +474,7 @@ process_file(task_id)
 
 ### 實作 - 資料類型轉換
 
-- [ ] T031 [P] [US4] 實作資料類型轉換器（utils/type_converter.py）
+- [X] T031 [P] [US4] 實作資料類型轉換器（utils/type_converter.py）
   - convert_value(value: str, data_type: str, field_name: str) → Any
   - 支援類型：string, int, double, timestamp
   - timestamp 格式：YYYY-MM-DD HH:MM:SS
@@ -500,7 +500,7 @@ assert convert_value("測試", "string", "col4") == "測試"
 
 ### 整合 - 加入類型轉換
 
-- [ ] T032 [US4] 擴展 parse_file_content() 加入類型轉換
+- [X] T032 [US4] 擴展 parse_file_content() 加入類型轉換
   - 在解析後立即轉換每個欄位的資料類型
   - 轉換失敗記錄警告但不中斷處理
 
@@ -525,7 +525,7 @@ assert isinstance(record['date'], datetime)
 assert isinstance(record['name'], str)
 ```
 
-- [ ] T033 [US4] 擴展 write_parquet() 加入 transform_type metadata
+- [X] T033 [US4] 擴展 write_parquet() 加入 transform_type metadata
   - 將 transform_type 寫入 Parquet schema metadata
   - 下游服務可讀取 metadata 了解轉碼需求
 
@@ -555,7 +555,7 @@ assert b'transform_type' in metadata
 
 ### 任務狀態不一致修復
 
-- [ ] T034 [P] 實作啟動時的狀態修復（main.py）
+- [X] T034 [P] 實作啟動時的狀態修復（main.py）
   - 掃描所有 status='processing' 且超過 1 小時的任務
   - 重置為 status='pending'
   - 記錄修復日誌
@@ -575,7 +575,7 @@ assert task['status'] == 'pending'
 
 ### 前次失敗任務關聯
 
-- [ ] T035 實作前次失敗任務追蹤（services/file_processor.py）
+- [X] T035 實作前次失敗任務追蹤（services/file_processor.py）
   - 在 create_task() 時查詢同名檔案的前次失敗任務
   - 設定 previous_failed_task_id
 
@@ -606,9 +606,9 @@ assert task2_info['previous_failed_task_id'] == task1
 
 ### 文件與部署
 
-- [ ] T038 [P] 建立 README.md（安裝、配置、執行說明）
-- [ ] T039 [P] 建立 Kubernetes CronJob YAML（依照 plan.md §部署架構）
-- [ ] T040 [P] 建立假資料 SQL 腳本（quickstart.md 的範例資料）
+- [X] T038 [P] 建立 README.md（安裝、配置、執行說明）
+- [X] T039 [P] 建立 Kubernetes CronJob YAML（依照 plan.md §部署架構）
+- [X] T040 [P] 建立假資料 SQL 腳本（quickstart.md 的範例資料）
 
 **檢查點**：專案完整，可部署至生產環境
 

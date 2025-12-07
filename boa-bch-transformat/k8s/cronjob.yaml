@@ -1,0 +1,241 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: boa-bch-transformat
+  namespace: default
+  labels:
+    app: boa-bch-transformat
+    component: batch-processor
+spec:
+  # 每 15 分鐘執行一次
+  schedule: "*/15 * * * *"
+  
+  # 並行策略：Forbid 避免同時執行多個 Job
+  concurrencyPolicy: Forbid
+  
+  # 保留最近 3 次成功和 1 次失敗的 Job 歷史
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  
+  # Job 啟動期限：如果超過 60 秒無法啟動，則視為失敗
+  startingDeadlineSeconds: 60
+  
+  jobTemplate:
+    metadata:
+      labels:
+        app: boa-bch-transformat
+        component: batch-processor
+    spec:
+      # Job 完成後自動清理 Pod（600 秒後）
+      ttlSecondsAfterFinished: 600
+      
+      # 失敗重試策略：不重試（由下次 CronJob 執行接手）
+      backoffLimit: 0
+      
+      template:
+        metadata:
+          labels:
+            app: boa-bch-transformat
+            component: batch-processor
+        spec:
+          # 重啟策略：Never（失敗後不自動重啟）
+          restartPolicy: Never
+          
+          # Service Account（需要存取 ConfigMap 和 Secret）
+          serviceAccountName: boa-bch-transformat-sa
+          
+          containers:
+          - name: transformat
+            image: your-registry/boa-bch-transformat:latest
+            imagePullPolicy: IfNotPresent
+            
+            # 資源限制
+            resources:
+              requests:
+                memory: "512Mi"
+                cpu: "250m"
+              limits:
+                memory: "2Gi"
+                cpu: "1000m"
+            
+            # 環境變數
+            env:
+            - name: ENV
+              value: "prod"
+            
+            # 資料庫配置（從 Secret 讀取）
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: boa-bch-transformat-secret
+                  key: db-host
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: boa-bch-transformat-secret
+                  key: db-port
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: boa-bch-transformat-secret
+                  key: db-name
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: boa-bch-transformat-secret
+                  key: db-user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: boa-bch-transformat-secret
+                  key: db-password
+            
+            # SFTP 配置（從 Secret 讀取）
+            - name: SFTP_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: boa-bch-transformat-secret
+                  key: sftp-host
+            - name: SFTP_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: boa-bch-transformat-secret
+                  key: sftp-port
+            - name: SFTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: boa-bch-transformat-secret
+                  key: sftp-user
+            - name: SFTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: boa-bch-transformat-secret
+                  key: sftp-password
+            
+            # 應用程式配置（從 ConfigMap 讀取）
+            - name: INPUT_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: boa-bch-transformat-config
+                  key: input-dir
+            - name: OUTPUT_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: boa-bch-transformat-config
+                  key: output-dir
+            - name: DOWNSTREAM_API_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: boa-bch-transformat-config
+                  key: downstream-api-base-url
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: boa-bch-transformat-config
+                  key: log-level
+            - name: LOG_FORMAT
+              valueFrom:
+                configMapKeyRef:
+                  name: boa-bch-transformat-config
+                  key: log-format
+            - name: LOG_OUTPUT
+              valueFrom:
+                configMapKeyRef:
+                  name: boa-bch-transformat-config
+                  key: log-output
+            
+            # 掛載日誌目錄
+            volumeMounts:
+            - name: logs
+              mountPath: /app/logs
+            - name: nas-input
+              mountPath: /nas/input
+              readOnly: true
+            - name: nas-output
+              mountPath: /nas/output
+            
+            # 健康檢查（可選）
+            # livenessProbe:
+            #   exec:
+            #     command:
+            #     - /bin/sh
+            #     - -c
+            #     - "ps aux | grep 'python.*main.py' | grep -v grep"
+            #   initialDelaySeconds: 10
+            #   periodSeconds: 30
+            #   timeoutSeconds: 5
+            #   failureThreshold: 3
+          
+          volumes:
+          - name: logs
+            emptyDir: {}
+          - name: nas-input
+            persistentVolumeClaim:
+              claimName: nas-input-pvc
+          - name: nas-output
+            persistentVolumeClaim:
+              claimName: nas-output-pvc
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: boa-bch-transformat-config
+  namespace: default
+data:
+  input-dir: "/nas/input"
+  output-dir: "/nas/output"
+  downstream-api-base-url: "http://mask-service.default.svc.cluster.local:8080"
+  log-level: "INFO"
+  log-format: "json"
+  log-output: "logs/transformat.log"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: boa-bch-transformat-secret
+  namespace: default
+type: Opaque
+stringData:
+  # 資料庫配置
+  db-host: "postgresql.default.svc.cluster.local"
+  db-port: "5432"
+  db-name: "transformat_db"
+  db-user: "transformat_user"
+  db-password: "change_me_in_production"
+  
+  # SFTP 配置
+  sftp-host: "sftp.example.com"
+  sftp-port: "22"
+  sftp-user: "sftp_user"
+  sftp-password: "change_me_in_production"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: boa-bch-transformat-sa
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: boa-bch-transformat-role
+  namespace: default
+rules:
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: boa-bch-transformat-rolebinding
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: boa-bch-transformat-sa
+  namespace: default
+roleRef:
+  kind: Role
+  name: boa-bch-transformat-role
+  apiGroup: rbac.authorization.k8s.io

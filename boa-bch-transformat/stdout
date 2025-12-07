@@ -1,0 +1,17 @@
+{"text": "{\"timestamp\":\"2025-12-06 23:43:37.896\",\"level\":\"INFO\",\"module\":\"logger\",\"function\":\"setup_logger\",\"line\":74,\"message\":\"日誌系統已初始化：level=INFO, format=json\",\"extra\":{}}\n", "record": {"elapsed": {"repr": "0:00:00.039263", "seconds": 0.039263}, "exception": null, "extra": {}, "file": {"name": "logger.py", "path": "/Users/michaelkh/projects/spec-kit-template/boa-bch-transformat/src/transformat/utils/logger.py"}, "function": "setup_logger", "level": {"icon": "ℹ️", "name": "INFO", "no": 20}, "line": 74, "message": "日誌系統已初始化：level=INFO, format=json", "module": "logger", "name": "transformat.utils.logger", "process": {"id": 91637, "name": "MainProcess"}, "thread": {"id": 8449837120, "name": "MainThread"}, "time": {"repr": "2025-12-06 23:43:37.896327+08:00", "timestamp": 1765035817.896327}}}
+{"text": "{\"timestamp\":\"2025-12-06 23:43:37.896\",\"level\":\"INFO\",\"module\":\"test_basic\",\"function\":\"test_logger\",\"line\":50,\"message\":\"測試訊息\",\"extra\":{'extra': {'test': 'value'}}}\n", "record": {"elapsed": {"repr": "0:00:00.039501", "seconds": 0.039501}, "exception": null, "extra": {"extra": {"test": "value"}}, "file": {"name": "test_basic.py", "path": "/Users/michaelkh/projects/spec-kit-template/boa-bch-transformat/test_basic.py"}, "function": "test_logger", "level": {"icon": "ℹ️", "name": "INFO", "no": 20}, "line": 50, "message": "測試訊息", "module": "test_basic", "name": "__main__", "process": {"id": 91637, "name": "MainProcess"}, "thread": {"id": 8449837120, "name": "MainThread"}, "time": {"repr": "2025-12-06 23:43:37.896565+08:00", "timestamp": 1765035817.896565}}}
+2025-12-06 23:44:59.473 | INFO     | transformat.utils.logger:setup_logger:74 | 日誌系統已初始化：level=INFO, format=text
+2025-12-06 23:44:59.473 | INFO     | __main__:dry_run:52 | === BOA 批次轉檔服務啟動（乾運行模式）===
+2025-12-06 23:44:59.473 | INFO     | __main__:dry_run:53 | 環境：local
+2025-12-06 23:44:59.473 | INFO     | __main__:dry_run:54 | 資料庫：user@localhost:5432/demo
+2025-12-06 23:44:59.473 | INFO     | __main__:dry_run:55 | SFTP：user@localhost:2222
+2025-12-06 23:45:00.400 | CRITICAL | __main__:dry_run:145 | 未預期的錯誤：cannot import name 'FileProcessor' from 'transformat.services.file_processor' (/Users/michaelkh/projects/spec-kit-template/boa-bch-transformat/src/transformat/services/file_processor.py)
+2025-12-06 23:45:00.401 | INFO     | __main__:dry_run:154 | === 測試結束 ===
+2025-12-06 23:46:16.838 | INFO     | transformat.utils.logger:setup_logger:74 | 日誌系統已初始化：level=INFO, format=text
+2025-12-06 23:46:16.838 | INFO     | __main__:dry_run:52 | === BOA 批次轉檔服務啟動（乾運行模式）===
+2025-12-06 23:46:16.838 | INFO     | __main__:dry_run:53 | 環境：local
+2025-12-06 23:46:16.838 | INFO     | __main__:dry_run:54 | 資料庫：user@localhost:5432/demo
+2025-12-06 23:46:16.838 | INFO     | __main__:dry_run:55 | SFTP：user@localhost:2222
+2025-12-06 23:46:16.933 | INFO     | __main__:dry_run:105 | === 系統初始化完成 ===
+2025-12-06 23:46:16.933 | INFO     | __main__:dry_run:127 | === BOA 批次轉檔服務乾運行結束 ===
+2025-12-06 23:46:16.933 | INFO     | __main__:dry_run:154 | === 測試結束 ===

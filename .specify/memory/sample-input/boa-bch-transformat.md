@@ -105,14 +105,14 @@
 
 <!-- step 3.1. 執行 checklist  -->
 ```yaml
-為何不依照 prompt 要求放在該放的地方? 原本的 checklist 是執行 specify 自行產生的，
-若判斷不需要，可自行考慮移除。
+    - 為何不依照 prompt 要求放在該放的地方? 原本的 checklist 是執行 specify 自行產生的，
+      若判斷不需要，可自行考慮移除。
 ```
 <!-- step 3.1. 執行結果: 移除新建立的 requirements.md, 並移動到 spec.md 底下 -->
 
 <!-- step 3.2. 執行 checklist  -->
 ```yaml
-我有一個問題，你為什麼不遵循定義的 checklist 規則? 而是要放在 plan.md 底下
+    - 我有一個問題，你為什麼不遵循定義的 checklist 規則? 而是要放在 plan.md 底下
 ```
 <!-- step 3.2. 執行結果: 移除 spec.md 底下新增的項目，但仍沒有建立新的 checklist -->
 
@@ -124,13 +124,13 @@
 
 <!-- step 3.4. 執行 checklist  -->
 ```yaml
-有需要改名成 requirements-plan.md 比較好嗎? 還是你覺得不需要?
+    - 有需要改名成 requirements-plan.md 比較好嗎? 還是你覺得不需要?
 ```
 <!-- step 3.4. 執行結果: 不需要調整命名 -->
 
 <!-- step 3.5 執行 checklist  -->
 ```yaml
-phase 1 請說明一下，若我已經完成，請直接開始檢查
+    - phase 1 請說明一下，若我已經完成，請直接開始檢查
 ```
 <!-- step 3.5. 執行結果: 產出檢查清單報告，plan-phase1-report.md -->
 
@@ -180,4 +180,25 @@ phase 1 請說明一下，若我已經完成，請直接開始檢查
     - 將專案結構的 env/ 的底下，拉到 resources/env/ 底下，我不想把各環境的配置放在 src 裡面。
     請回覆以下問題，不需做任何調整: 
     - 在 task 或 implement 階段時，作為開發階段的 DB 和 SFTP 預設值會使用是什麼? 會在哪個階段定義?
+```
+
+### Step 7. implement
+<!-- step 7.1 執行 implement -->
+```yaml
+    請優先參考 constitution.md，並採取以下行動:
+    - 開始實作 implement，已使用 docker 啟動 DB 資料庫和 SFTP 服務，不需要針對服務是否啟動做處理，直接嘗試連線。
+    - 參數配置可參考 quickstart.md 
+```
+<!-- step 7.1 執行結果: 發現功能出現根本性的錯誤，需要回頭調整，其他可優化的方向如下  -->
+> 可調整的優化方向
+```yaml
+    - 資料結構可調整成 src/ 底下就好，不需要 transformat 這層。
+    - main.py 放在 spec 專案底下，不要放在 src 底下。
+    - 先產生可執行的 的 DDL 和 DML SQL，由開發者執行。
+    - log 需考慮開發時，使用一般輸出結構，否則 json 難以閱讀。
+    - 不需要撰寫整合測試。可先要求安裝 pytest-cov, pytest-mock 等工具。
+    - 要求使用 ruff 程式碼品質檢測工具。
+    - 完成 task 後，確實使用更新 task.md 文件。
+    - 不需要處理 k8s cronjob yaml。
+    - 多餘的專案結構。
 ```

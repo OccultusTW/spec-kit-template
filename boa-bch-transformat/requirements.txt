@@ -1,0 +1,25 @@
+# BOA 批次轉檔服務依賴清單
+
+# 資料處理
+pyarrow==15.0.0
+
+# 資料庫連線
+psycopg2-binary==2.9.9
+
+# SFTP 客戶端
+paramiko==3.4.0
+
+# HTTP 客戶端與重試機制
+requests==2.31.0
+tenacity==8.2.3
+
+# 日誌記錄
+loguru==0.7.2
+
+# 中文字元寬度計算
+wcwidth==0.2.13
+
+# 開發工具
+pytest==7.4.3
+pytest-cov==4.1.0
+ruff==0.1.9
