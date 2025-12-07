@@ -1,742 +1,982 @@
 ---
-description: "BOA 批次轉檔服務實作任務清單"
+description: "BOA 批次轉檔服務實作任務清單 v4.0"
+version: "4.0"
+last_updated: "2025-12-07"
 ---
 
 # 任務：BOA 批次轉檔服務
 
-**輸入**：來自 `/specs/001-boa-bch-transformat/` 的設計文件
-**先決條件**：plan.md（必需）、spec.md（使用者故事必需）、research.md、data-model.md、contracts/
+**輸入**：來自 `/specs/001-boa-bch-transformat/` 的設計文件（v4.0）  
+**先決條件**：spec.md（v4.0）、plan.md（v4.0）、data-model.md（v4.0）、research.md、contracts/、quickstart.md
 
-**組織原則**：任務按使用者故事分組，確保每個故事可獨立實作和測試
-**任務大小**：每個任務都足夠小，可在 30 分鐘內完成並立即驗證結果
+**核心設計變更（v4.0）**：
+- NAS 掃描 + 檔案前綴匹配（取代資料庫查詢待處理檔案）
+- 資料表：file_specifications（取代 file_records），使用 file_prefix 欄位
+- 檔案命名：customer20251206001.txt（無底線，連續格式）
+- 專案結構：src/ 直接使用（移除 src/transformat/），main.py 在根目錄
 
-## 格式：`- [ ] [ID] [P?] [Story] 描述`
+**組織原則**：
+- 任務按使用者故事分組（US1、US2、US3、US4），確保每個故事可獨立實作和測試
+- 任務足夠小，可在 30 分鐘內完成並立即驗證結果
+- 遵循 TDD 原則：先寫測試，再寫實作（紅-綠-重構）
+
+## 任務格式：`- [ ] [ID] [P?] [Story] 描述 in 檔案路徑`
 
 - **[P]**：可並行執行（不同檔案、無依賴）
 - **[Story]**：所屬使用者故事（US1、US2、US3、US4）
-- **路徑**：所有路徑使用絕對路徑格式
-
-## 路徑慣例
-
-- 專案根目錄：`boa-bch-transformat/`
-- 原始碼：`src/transformat/`
-- 測試：`tests/`
-- 配置：`src/transformat/config/`
+- **路徑**：所有路徑為絕對路徑，從專案根目錄 `boa-bch-transformat/` 開始
 
 ---
 
-## 階段 1：設定（共享基礎設施）
+## Phase 1: 設定（Setup）
 
-**目的**：專案初始化和基本結構
+**目的**：專案初始化和基本結構  
+**優先級**：必須完成，所有後續任務的基礎
 
-- [X] T001 建立專案目錄結構（依照 plan.md §專案結構）
-- [X] T002 初始化 Python 3.13 虛擬環境（.venv）
-- [X] T003 [P] 建立 requirements.txt（pyarrow, psycopg2, paramiko, requests, loguru, wcwidth, tenacity）
-- [X] T004 [P] 配置環境檔案（resources/env/local.env, ut.env, uat.env, prod.env）
-- [X] T005 [P] 建立 .gitignore（排除 .venv, *.pyc, __pycache__, .env）
+### 專案結構初始化
 
-**檢查點**：執行 `python --version` 確認 3.13，執行 `pip list` 確認所有依賴安裝成功
+- [ ] T001 建立專案根目錄結構 in boa-bch-transformat/
+  ```bash
+  mkdir -p boa-bch-transformat/{src,tests/unit,tests/fixtures/sample_files,resources/env,scripts}
+  mkdir -p boa-bch-transformat/src/{config,models,services,repositories,utils,exceptions}
+  ```
+
+- [ ] T002 初始化 Python 3.13 虛擬環境 in boa-bch-transformat/.venv
+  ```bash
+  python3.13 -m venv .venv
+  source .venv/bin/activate
+  python --version  # 驗證：Python 3.13.x
+  ```
+
+- [ ] T003 [P] 建立 requirements.txt in boa-bch-transformat/requirements.txt
+  ```txt
+  pyarrow
+  psycopg2-binary
+  paramiko
+  requests
+  loguru
+  wcwidth
+  tenacity
+  ruff
+  pytest
+  pytest-cov
+  pytest-mock
+  ```
+  驗證：`pip install -r requirements.txt && pip list`
+
+- [ ] T004 [P] 建立 pyproject.toml（ruff 配置）in boa-bch-transformat/pyproject.toml
+  ```toml
+  [tool.ruff]
+  line-length = 120
+  select = ["E", "W", "F", "I", "N", "UP"]
+  ignore = []
+  
+  [tool.pytest.ini_options]
+  testpaths = ["tests"]
+  python_files = ["test_*.py"]
+  ```
+
+- [ ] T005 [P] 建立 .gitignore in boa-bch-transformat/.gitignore
+  ```
+  .venv/
+  __pycache__/
+  *.pyc
+  *.pyo
+  .pytest_cache/
+  .coverage
+  *.egg-info/
+  .env
+  *.log
+  ```
+
+- [ ] T006 [P] 建立環境配置檔案 in boa-bch-transformat/resources/env/
+  - local.env（開發環境）
+  - ut.env（單元測試環境）
+  - uat.env（UAT 環境）
+  - prod.env（正式環境）
+  驗證：檢查 4 個檔案是否存在
+
+- [ ] T007 [P] 建立所有 __init__.py in boa-bch-transformat/src/
+  ```bash
+  touch src/__init__.py
+  touch src/{config,models,services,repositories,utils,exceptions}/__init__.py
+  touch tests/__init__.py tests/unit/__init__.py
+  ```
+
+**檢查點**：
+- 執行 `python --version` 確認 Python 3.13
+- 執行 `pip list` 確認所有依賴安裝成功
+- 執行 `tree boa-bch-transformat` 確認目錄結構正確
 
 ---
 
-## 階段 2：基礎設施（阻塞性前置條件）
+## Phase 2: 基礎設施（Foundational）
 
-**目的**：所有使用者故事共用的核心基礎設施
+**目的**：所有使用者故事共用的核心基礎設施  
+**阻塞性**：此階段必須完成才能開始任何使用者故事實作
 
-**⚠️ 關鍵**：此階段必須完成才能開始任何使用者故事實作
+### 資料庫結構
 
-### 資料庫基礎
+- [ ] T008 建立資料庫 DDL 腳本 in boa-bch-transformat/scripts/ddl.sql
+  - 根據 data-model.md 建立 4 張表：
+    - file_specifications（主檔規格，file_prefix 欄位）
+    - field_definitions（欄位定義）
+    - file_tasks（檔案任務）
+    - task_sequences（任務序列）
+  驗證：執行 SQL 腳本確認表建立成功
 
-- [X] T006 建立資料庫 schema SQL 腳本（data-model.md 的 4 張表）
-- [X] T007 [P] 實作 ErrorCode Enum（exceptions/base.py，16 個錯誤定義）
-- [X] T008 [P] 實作 BaseTransformatException（exceptions/base.py）
-- [X] T009 [P] 實作 SystemException 和 ProcessingException（exceptions/custom.py）
+- [ ] T009 建立測試資料 DML 腳本 in boa-bch-transformat/scripts/dml.sql
+  - 插入 3 筆 file_specifications 測試資料（customer, transaction, order 前綴）
+  - 插入對應的 field_definitions 測試資料
+  驗證：查詢 file_specifications 確認有 3 筆資料
 
-**驗證**：
-```python
-# 測試 ErrorCode 可正常匯入和使用
-from exceptions.base import ErrorCode
-assert ErrorCode.FILE_NOT_FOUND.format(file_path="/test") == "檔案不存在：/test"
-```
+### 異常處理基礎
+
+- [ ] T010 [P] 實作 ErrorCode Enum in boa-bch-transformat/src/exceptions/base.py
+  ```python
+  from enum import Enum
+  
+  class ErrorCode(Enum):
+      FILE_NOT_FOUND = "檔案不存在：{file_path}"
+      ENCODING_ERROR = "編碼錯誤：{details}"
+      PARSE_ERROR = "解析錯誤：{details}"
+      # ... 共 16 個錯誤碼（參考 plan.md §錯誤處理策略）
+  ```
+  驗證：
+  ```python
+  from src.exceptions.base import ErrorCode
+  assert ErrorCode.FILE_NOT_FOUND.value == "檔案不存在：{file_path}"
+  ```
+
+- [ ] T011 [P] 實作 BaseTransformatException in boa-bch-transformat/src/exceptions/base.py
+  ```python
+  class BaseTransformatException(Exception):
+      def __init__(self, error_code: ErrorCode, **kwargs):
+          self.error_code = error_code
+          self.message = error_code.value.format(**kwargs)
+          super().__init__(self.message)
+  ```
+
+- [ ] T012 [P] 實作自定義異常類別 in boa-bch-transformat/src/exceptions/custom.py
+  - SystemException（系統錯誤）
+  - ProcessingException（處理錯誤）
+  驗證：測試異常能正確拋出並包含錯誤訊息
 
 ### 配置與日誌
 
-- [X] T010 [P] 實作環境配置讀取（config/settings.py，支援 local/ut/uat/prod）
-- [X] T011 [P] 實作 Loguru 日誌配置（utils/logger.py，JSON 格式）
+- [ ] T013 [P] 實作環境配置讀取 in boa-bch-transformat/src/config/settings.py
+  ```python
+  import os
+  from dataclasses import dataclass
+  
+  @dataclass
+  class Settings:
+      env: str = os.getenv("ENV", "local")
+      db_host: str = os.getenv("DB_HOST")
+      db_port: int = int(os.getenv("DB_PORT", "5432"))
+      # ... 其他配置
+  ```
+  驗證：
+  ```python
+  from src.config.settings import Settings
+  settings = Settings()
+  assert settings.env in ["local", "ut", "uat", "prod"]
+  ```
 
-**驗證**：
-```python
-from config.settings import Settings
-from utils.logger import logger
-settings = Settings()
-logger.info("測試訊息")  # 檢查日誌檔案是否產生
-```
+- [ ] T014 [P] 實作 Loguru 日誌配置 in boa-bch-transformat/src/utils/logger.py
+  ```python
+  from loguru import logger
+  import sys
+  
+  def setup_logger(env: str):
+      logger.remove()
+      if env == "local":
+          # 一般文字格式
+          logger.add(sys.stderr, format="<green>{time}</green> {message}")
+      else:
+          # JSON 格式（for Graylog）
+          logger.add(sys.stderr, serialize=True)
+  ```
+  驗證：執行 `logger.info("測試")` 確認日誌輸出
 
 ### 資料庫連線
 
-- [X] T012 實作資料庫連線池（utils/db_connection.py，ThreadedConnectionPool 5-15）
-- [X] T013 測試連線池基本功能（取得連線、歸還連線、連線池耗盡錯誤）
+- [ ] T015 實作資料庫連線池 in boa-bch-transformat/src/utils/db_connection.py
+  ```python
+  from psycopg2.pool import ThreadedConnectionPool
+  
+  def create_connection_pool(min_conn=5, max_conn=15):
+      return ThreadedConnectionPool(min_conn, max_conn, dsn="...")
+  ```
+  驗證：
+  ```python
+  pool = create_connection_pool()
+  conn = pool.getconn()
+  assert conn is not None
+  pool.putconn(conn)
+  ```
 
-**驗證**：
-```python
-from utils.db_connection import create_connection_pool
-pool = create_connection_pool()
-conn = pool.getconn()
-assert conn is not None
-pool.putconn(conn)
-pool.closeall()
-```
+- [ ] T016 測試連線池基本功能 in boa-bch-transformat/tests/unit/test_db_connection.py
+  - 測試取得連線
+  - 測試歸還連線
+  - 測試連線池耗盡情況
+  驗證：`pytest tests/unit/test_db_connection.py -v`
 
-### 基礎 Repository
+### Models（資料實體）
 
-- [X] T014 [P] 實作 FileRecordRepository 基礎類別（repositories/file_record_repo.py）
-  - insert_file_record()
-  - get_file_record_by_name()
-  - list_pending_files()
+- [ ] T017 [P] 實作 FileSpecification model in boa-bch-transformat/src/models/file_spec.py
+  ```python
+  from dataclasses import dataclass
+  
+  @dataclass
+  class FileSpecification:
+      id: int
+      file_prefix: str  # 檔案前綴（如：'customer'）
+      encoding: str
+      format_type: str
+      delimiter: str = None
+  ```
 
-**驗證**：執行單元測試確認 CRUD 操作正常
+- [ ] T018 [P] 實作 FieldDefinition model in boa-bch-transformat/src/models/field_definition.py
 
-- [X] T015 [P] 實作 TaskSequenceRepository（repositories/task_sequence_repo.py）
-  - generate_task_id(date) → transformat_YYYYMMDD0001
-  - 使用 SELECT FOR UPDATE 確保並行安全
+- [ ] T019 [P] 實作 FileTask model in boa-bch-transformat/src/models/file_task.py
 
-**驗證**：
-```python
-# 測試序列生成
-repo = TaskSequenceRepository(pool)
-task_id1 = repo.generate_task_id("20251206")  # transformat_202512060001
-task_id2 = repo.generate_task_id("20251206")  # transformat_202512060002
-assert task_id1 != task_id2
-```
+- [ ] T020 [P] 實作 TaskSequence model in boa-bch-transformat/src/models/task_sequence.py
 
-- [X] T016 [P] 實作 FileTaskRepository（repositories/file_task_repo.py）
-  - create_task(file_record_id, file_name, previous_failed_task_id)
-  - update_status(task_id, status, error_message)
-  - get_task_by_id(task_id)
-
-**驗證**：執行單元測試確認任務建立和狀態更新正常
-
-**檢查點**：基礎設施就緒，可開始使用者故事並行開發
-
----
-
-## 階段 3：使用者故事 1 - 基本檔案讀取與格式轉換（優先級：P1）🎯 MVP
-
-**目標**：從 SFTP 讀取單一 txt 檔案，根據固定長度或分隔符號解析，寫入 Parquet 檔案
-
-**獨立測試標準**：
-- 可讀取 SFTP 上的 txt 檔案
-- 可正確偵測 big5/utf-8 編碼
-- 可正確解析固定長度格式（考慮中文字元寬度）
-- 可正確解析分隔符號格式
-- 可成功寫入 Parquet 檔案
-- 錯誤自動記錄到 file_tasks.error_message
-
-### 實作 - SFTP 讀取
-
-- [X] T017 [P] [US1] 實作 SFTP 連線管理（services/sftp_client.py）
-  - connect_to_sftp() → SFTPClient
-  - 拋出 SystemException(ErrorCode.SFTP_AUTH_FAILED)
-  - 拋出 SystemException(ErrorCode.SFTP_NETWORK_ERROR)
-
-**驗證**：
-```python
-# 測試連線成功
-sftp = connect_to_sftp()
-assert sftp is not None
-sftp.close()
-
-# 測試認證失敗錯誤
-try:
-    connect_to_sftp(wrong_password)
-except SystemException as e:
-    assert e.error_code == ErrorCode.SFTP_AUTH_FAILED
-```
-
-- [X] T018 [P] [US1] 實作 SFTP 檔案讀取（services/sftp_client.py）
-  - read_file_from_sftp(sftp, file_path, task_id) → bytes
-  - 拋出 ProcessingException(ErrorCode.FILE_NOT_FOUND)
-  - 拋出 ProcessingException(ErrorCode.FILE_READ_FAILED)
-
-**驗證**：
-```python
-# 測試檔案讀取
-content = read_file_from_sftp(sftp, "/data/test.txt", "test_task")
-assert len(content) > 0
-
-# 測試檔案不存在錯誤
-try:
-    read_file_from_sftp(sftp, "/data/notexist.txt", "test_task")
-except ProcessingException as e:
-    assert e.error_code == ErrorCode.FILE_NOT_FOUND
-```
-
-### 實作 - 編碼偵測
-
-- [X] T019 [US1] 實作編碼偵測器（utils/encoding_detector.py）
-  - detect_encoding(content: bytes, task_id: str) → str
-  - 嘗試順序：utf-8 → big5 → gbk
-  - 拋出 ProcessingException(ErrorCode.ENCODING_DETECTION_FAILED)
-
-**驗證**：
-```python
-# 測試 UTF-8 檔案
-utf8_content = "測試內容".encode('utf-8')
-assert detect_encoding(utf8_content, "test") == "utf-8"
-
-# 測試 BIG5 檔案
-big5_content = "測試內容".encode('big5')
-assert detect_encoding(big5_content, "test") == "big5"
-
-# 測試無效編碼
-invalid_content = b'\xff\xfe\xff\xfe'
-try:
-    detect_encoding(invalid_content, "test")
-except ProcessingException as e:
-    assert e.error_code == ErrorCode.ENCODING_DETECTION_FAILED
-```
-
-### 實作 - 資料解析
-
-- [X] T020 [P] [US1] 實作固定長度解析器（services/parser_service.py）
-  - parse_fixed_length_line(line: str, field_defs: list, line_num: int, task_id: str) → dict
-  - 使用 wcwidth 計算中文字元寬度
-  - 自動 strip() 移除空白
-  - 拋出 ProcessingException(ErrorCode.PARSE_FIXED_LENGTH_FAILED)
-
-**驗證**：
-```python
-# 測試固定長度解析（全形中文）
-field_defs = [{'name': 'col1', 'length': 10}, {'name': 'col2', 'length': 5}]
-line = "測試      12345"  # 測試=4寬度, 6空格, 12345=5寬度
-result = parse_fixed_length_line(line, field_defs, 1, "test")
-assert result['col1'] == "測試"
-assert result['col2'] == "12345"
-
-# 測試長度不符錯誤
-wrong_line = "短"
-try:
-    parse_fixed_length_line(wrong_line, field_defs, 1, "test")
-except ProcessingException as e:
-    assert e.error_code == ErrorCode.PARSE_FIXED_LENGTH_FAILED
-    assert "預期 15" in e.message
-```
-
-- [X] T021 [P] [US1] 實作分隔符號解析器（services/parser_service.py）
-  - parse_delimiter_line(line: str, delimiter: str, line_num: int, task_id: str) → list
-  - 拋出 ProcessingException(ErrorCode.PARSE_DELIMITER_FAILED)
-
-**驗證**：
-```python
-# 測試分隔符號解析
-line = "AAA||BBB||CCC"
-result = parse_delimiter_line(line, "||", 1, "test")
-assert result == ["AAA", "BBB", "CCC"]
-
-# 測試找不到分隔符號錯誤
-line_no_delim = "AAABBBCCC"
-try:
-    parse_delimiter_line(line_no_delim, "||", 1, "test")
-except ProcessingException as e:
-    assert e.error_code == ErrorCode.PARSE_DELIMITER_FAILED
-```
-
-- [X] T022 [US1] 實作批次解析器（services/parser_service.py）
-  - parse_file_content(content: str, file_record: FileRecord, task_id: str) → Iterator[dict]
-  - 根據 file_record.delimiter 判斷解析方式
-  - 使用 yield 返回批次（30,000 行/批）
-  - 在錯誤訊息中包含行號
-
-**驗證**：
-```python
-# 測試批次解析（固定長度）
-content = "測試  12345\n測試  67890\n"
-file_record = FileRecord(delimiter=None, field_definitions=[...])
-batches = list(parse_file_content(content, file_record, "test"))
-assert len(batches) > 0
-assert all('col1' in record for batch in batches for record in batch)
-```
-
-### 實作 - Parquet 寫入
-
-- [X] T023 [US1] 實作 Parquet 寫入器（services/parquet_writer.py）
-  - write_parquet(records: Iterator[dict], output_path: str, schema: list, task_id: str) → None
-  - 使用 pyarrow.parquet.ParquetWriter 串流寫入
-  - 每 30,000 筆寫入一次
-  - 拋出 ProcessingException(ErrorCode.PARQUET_WRITE_FAILED)
-  - 拋出 ProcessingException(ErrorCode.PARQUET_DISK_SPACE_INSUFFICIENT)
-
-**驗證**：
-```python
-# 測試 Parquet 寫入
-records = [{'col1': '測試', 'col2': '12345'} for _ in range(100)]
-schema = [{'name': 'col1', 'type': 'string'}, {'name': 'col2', 'type': 'string'}]
-output_path = "/tmp/test_output.parquet"
-write_parquet(iter(records), output_path, schema, "test")
-assert os.path.exists(output_path)
-
-# 驗證可讀取
-import pyarrow.parquet as pq
-table = pq.read_table(output_path)
-assert len(table) == 100
-```
-
-### 整合 - 檔案處理主流程
-
-- [X] T024 [US1] 實作檔案處理服務（services/file_processor.py）
-  - process_file(task_id: str) → None
-  - 整合：SFTP 讀取 → 編碼偵測 → 解析 → Parquet 寫入
-  - 統一錯誤處理（SystemException / ProcessingException）
-  - 自動記錄錯誤到 file_tasks.error_message
-
-**驗證**：
-```python
-# 準備測試資料
-task_repo.create_task(file_record_id=1, file_name="test.txt", previous_failed_task_id=None)
-task_id = "transformat_202512060001"
-
-# 執行處理
-process_file(task_id)
-
-# 驗證結果
-task = task_repo.get_task_by_id(task_id)
-assert task['status'] == 'completed'
-assert os.path.exists(output_path)
-```
-
-**檢查點**：此時 US1 完整功能，可處理單一檔案並驗證結果
+**檢查點**：所有基礎設施通過單元測試
 
 ---
 
-## 階段 4：使用者故事 2 - 多檔案批次處理與並行控制（優先級：P1）
+## Phase 3: User Story 1 - 基本檔案讀取與格式轉換（P1）
 
-**目標**：一次讀取資料庫所有待處理檔案，使用 Advisory Lock 避免多 Pod 競爭
+**目標**：NAS 掃描 + 前綴匹配 + 檔案轉換  
+**獨立測試**：預先建立主檔規格，放置測試檔案，驗證轉換結果
 
-**獨立測試標準**：
-- 可從資料庫讀取所有待處理檔案清單
-- 可使用 Advisory Lock 鎖定任務
-- 多個程序同時執行時不會處理同一檔案
-- 處理完成後自動釋放鎖
-- 錯誤檔案不影響其他檔案處理
+### NAS 檔案掃描與前綴匹配（核心變更）
 
-### 實作 - Advisory Lock 管理
+- [ ] T021 [P] [US1] 先寫測試：NAS 檔案掃描 in tests/unit/test_file_scanner.py
+  ```python
+  def test_scan_nas_directory_returns_file_list():
+      # Given: NAS 目錄有 3 個檔案
+      # When: 掃描目錄
+      # Then: 回傳檔案清單
+  
+  def test_extract_file_prefix():
+      # Given: 檔案名稱 "customer20251206001.txt"
+      # When: 提取前綴
+      # Then: 回傳 "customer"
+  ```
 
-- [X] T025 [P] [US2] 實作 Advisory Lock 管理器（services/lock_manager.py）
-  - try_acquire_lock(task_id: str, conn) → bool
-  - release_lock(task_id: str, conn) → None
-  - 使用 pg_try_advisory_lock(hashtext(task_id))
-  - 拋出 SystemException(ErrorCode.ADVISORY_LOCK_FAILED)
+- [ ] T022 [US1] 實作 FileScanner 服務 in src/services/file_scanner.py
+  ```python
+  import re
+  
+  class FileScanner:
+      def scan_directory(self, nas_path: str) -> list[str]:
+          """掃描 NAS 目錄，回傳檔案清單"""
+          pass
+      
+      def extract_prefix(self, filename: str) -> str:
+          """從檔案名稱提取前綴（customer20251206001.txt → customer）"""
+          pattern = r'^([a-zA-Z]+)\d+\.txt$'
+          match = re.match(pattern, filename)
+          return match.group(1) if match else None
+  ```
+  驗證：`pytest tests/unit/test_file_scanner.py -v`
 
-**驗證**：
-```python
-# 測試鎖取得
-conn1 = pool.getconn()
-lock_mgr = LockManager()
-assert lock_mgr.try_acquire_lock("test_task", conn1) == True
+### Repository 層（資料存取）
 
-# 測試鎖競爭
-conn2 = pool.getconn()
-assert lock_mgr.try_acquire_lock("test_task", conn2) == False
+- [ ] T023 [P] [US1] 先寫測試：FileSpecRepository in tests/unit/test_file_spec_repo.py
+  ```python
+  def test_get_spec_by_prefix():
+      # Given: 資料庫有 customer 前綴規格
+      # When: 查詢 get_spec_by_prefix('customer')
+      # Then: 回傳 FileSpecification 物件
+  ```
 
-# 測試鎖釋放
-lock_mgr.release_lock("test_task", conn1)
-assert lock_mgr.try_acquire_lock("test_task", conn2) == True
-```
+- [ ] T024 [US1] 實作 FileSpecRepository in src/repositories/file_spec_repo.py
+  ```python
+  class FileSpecRepository:
+      def get_spec_by_prefix(self, prefix: str) -> FileSpecification:
+          """透過前綴查詢主檔規格"""
+          pass
+      
+      def list_all_prefixes(self) -> list[str]:
+          """列出所有已設定的前綴"""
+          pass
+  ```
+  驗證：`pytest tests/unit/test_file_spec_repo.py -v`
 
-### 實作 - 批次處理主流程
+- [ ] T025 [P] [US1] 先寫測試：FieldDefinitionRepository in tests/unit/test_field_definition_repo.py
 
-- [X] T026 [US2] 擴展 FileTaskRepository 批次方法
-  - list_pending_tasks(limit: int) → List[dict]
-  - 查詢 status='pending' 的任務
+- [ ] T026 [US1] 實作 FieldDefinitionRepository in src/repositories/field_definition_repo.py
 
-**驗證**：
-```python
-# 建立測試任務
-for i in range(5):
-    task_repo.create_task(file_record_id=i, file_name=f"file{i}.txt", previous_failed_task_id=None)
+- [ ] T027 [P] [US1] 先寫測試：FileTaskRepository in tests/unit/test_file_task_repo.py
 
-# 查詢待處理任務
-tasks = task_repo.list_pending_tasks(limit=10)
-assert len(tasks) == 5
-assert all(t['status'] == 'pending' for t in tasks)
-```
+- [ ] T028 [US1] 實作 FileTaskRepository in src/repositories/file_task_repo.py
+  ```python
+  class FileTaskRepository:
+      def create_task(self, file_spec_id: int, file_name: str) -> str:
+          """建立檔案處理任務，回傳 task_id"""
+          pass
+      
+      def update_task_status(self, task_id: str, status: str, error_msg: str = None):
+          """更新任務狀態"""
+          pass
+  ```
 
-- [X] T027 [US2] 實作批次處理主程式（main.py）
-  - process_pending_tasks(db_pool, sftp_client) → None
-  - 讀取所有 pending 任務
-  - 逐一嘗試取得 Advisory Lock
-  - 成功取得鎖 → 呼叫 process_file()
-  - 失敗取得鎖 → 跳過該任務
-  - 使用 try-finally 確保鎖釋放
+- [ ] T029 [P] [US1] 先寫測試：TaskSequenceRepository in tests/unit/test_task_sequence_repo.py
 
-**驗證**：
-```python
-# 建立 5 個待處理任務
-# ...
+- [ ] T030 [US1] 實作 TaskSequenceRepository in src/repositories/task_sequence_repo.py
+  ```python
+  class TaskSequenceRepository:
+      def generate_task_id(self, date_str: str) -> str:
+          """生成 task_id：transformat_YYYYMMDD0001"""
+          pass
+  ```
 
-# 執行批次處理
-process_pending_tasks(db_pool, sftp_client)
+### SFTP 檔案讀取
 
-# 驗證結果
-completed_tasks = task_repo.list_tasks_by_status('completed')
-assert len(completed_tasks) == 5
-```
+- [ ] T031 [P] [US1] 先寫測試：SftpClient in tests/unit/test_sftp_client.py
+  ```python
+  def test_read_file_as_stream():
+      # Given: Mock SFTP 連線
+      # When: 讀取檔案串流
+      # Then: 回傳檔案內容迭代器
+  ```
 
-### 實作 - 啟動階段錯誤處理
+- [ ] T032 [US1] 實作 SftpClient in src/services/sftp_client.py
+  ```python
+  import paramiko
+  
+  class SftpClient:
+      def connect(self, host: str, username: str, password: str):
+          """建立 SFTP 連線"""
+          pass
+      
+      def read_file_stream(self, remote_path: str):
+          """串流讀取檔案（逐行）"""
+          pass
+  ```
+  驗證：`pytest tests/unit/test_sftp_client.py -v`
 
-- [X] T028 [US2] 實作應用程式入口點（main.py）
-  - main() 函數
-  - 啟動階段錯誤處理（SystemException → exit 1）
-  - 資源清理（finally 區塊）
+### 編碼偵測與處理
 
-**驗證**：
-```bash
-# 測試正常啟動
-python src/transformat/main.py
-# 應該看到日誌：正在建立資料庫連線池...
+- [ ] T033 [P] [US1] 先寫測試：EncodingDetector in tests/unit/test_encoding_detector.py
+  ```python
+  def test_detect_encoding_big5():
+      # Given: big5 編碼的 bytes
+      # When: 偵測編碼
+      # Then: 回傳 'big5'
+  
+  def test_detect_encoding_utf8():
+      # 測試 utf-8 偵測
+  ```
 
-# 測試啟動失敗（錯誤的資料庫設定）
-# 應該看到 CRITICAL 日誌並 exit 1
-```
+- [ ] T034 [US1] 實作 EncodingDetector in src/utils/encoding_detector.py
+  ```python
+  class EncodingDetector:
+      def detect(self, content_bytes: bytes) -> str:
+          """偵測編碼（big5 或 utf-8）"""
+          pass
+      
+      def decode_with_fallback(self, content_bytes: bytes, expected_encoding: str) -> str:
+          """使用預期編碼解碼，失敗則降級嘗試"""
+          pass
+  ```
+  驗證：`pytest tests/unit/test_encoding_detector.py -v`
 
-**檢查點**：此時 US2 完整功能，可批次處理多個檔案且避免競爭
+### 資料解析服務
+
+- [ ] T035 [P] [US1] 先寫測試：ParserService（分隔符號格式）in tests/unit/test_parser_service.py
+  ```python
+  def test_parse_delimited_format():
+      # Given: "col1||col2||col3" 格式的資料，分隔符號為 "||"
+      # When: 解析單行
+      # Then: 回傳 ["col1", "col2", "col3"]
+  ```
+
+- [ ] T036 [P] [US1] 先寫測試：ParserService（固定長度格式）in tests/unit/test_parser_service.py
+  ```python
+  def test_parse_fixed_length_format():
+      # Given: 固定長度資料 "Name      001" (name=10, id=3)
+      # When: 解析單行
+      # Then: 回傳 ["Name", "001"]（自動去除空白）
+  ```
+
+- [ ] T037 [US1] 實作 ParserService in src/services/parser_service.py
+  ```python
+  from wcwidth import wcswidth
+  
+  class ParserService:
+      def parse_delimited(self, line: str, delimiter: str) -> list[str]:
+          """解析分隔符號格式"""
+          return line.split(delimiter)
+      
+      def parse_fixed_length(self, line: str, field_lengths: list[int]) -> list[str]:
+          """解析固定長度格式（使用顯示寬度）"""
+          # 使用 wcwidth 計算字元寬度
+          pass
+  ```
+  驗證：`pytest tests/unit/test_parser_service.py -v`
+
+### Parquet 寫入服務
+
+- [ ] T038 [P] [US1] 先寫測試：ParquetWriter in tests/unit/test_parquet_writer.py
+  ```python
+  def test_write_batch_to_parquet():
+      # Given: 批次資料 [[row1], [row2], ...]
+      # When: 寫入 parquet
+      # Then: 產生 parquet 檔案且內容正確
+  ```
+
+- [ ] T039 [US1] 實作 ParquetWriter（串流處理）in src/services/parquet_writer.py
+  ```python
+  import pyarrow as pa
+  import pyarrow.parquet as pq
+  
+  class ParquetWriter:
+      def __init__(self, output_path: str, schema: pa.Schema):
+          self.writer = pq.ParquetWriter(output_path, schema)
+      
+      def write_batch(self, batch_data: list[dict], batch_size=30000):
+          """批次寫入（預設 30,000 rows/batch）"""
+          pass
+      
+      def close(self):
+          self.writer.close()
+  ```
+  驗證：`pytest tests/unit/test_parquet_writer.py -v`
+
+### 主要業務邏輯整合
+
+- [ ] T040 [P] [US1] 先寫測試：FileProcessor in tests/unit/test_file_processor.py
+  ```python
+  def test_process_file_with_prefix_match():
+      # Given: 檔案 "customer20251206001.txt"，資料庫有 customer 規格
+      # When: 處理檔案
+      # Then: 成功產生 parquet 檔案
+  
+  def test_process_file_without_prefix_match():
+      # Given: 檔案前綴無法比對到任何規格
+      # When: 處理檔案
+      # Then: 記錄警告並跳過
+  ```
+
+- [ ] T041 [US1] 實作 FileProcessor in src/services/file_processor.py
+  ```python
+  class FileProcessor:
+      def process_file(self, nas_path: str, filename: str):
+          """
+          處理單一檔案的完整流程：
+          1. 提取檔案前綴
+          2. 查詢主檔規格（file_specifications）
+          3. 讀取檔案內容（SFTP）
+          4. 解析資料（ParserService）
+          5. 寫入 parquet（ParquetWriter）
+          6. 更新任務狀態
+          """
+          pass
+  ```
+  驗證：`pytest tests/unit/test_file_processor.py -v`
+
+### 端到端測試（US1）
+
+- [ ] T042 [US1] 建立測試檔案 in tests/fixtures/sample_files/
+  - customer20251206001.txt（big5, 分隔符號 ||）
+  - transaction20251206001.txt（utf-8, 固定長度）
+
+- [ ] T043 [US1] 端到端測試：完整處理流程 in tests/unit/test_us1_integration.py
+  ```python
+  def test_us1_end_to_end():
+      # Given: 資料庫有規格，NAS 有檔案
+      # When: 執行完整處理流程
+      # Then: 產生正確的 parquet 檔案
+  ```
+
+**US1 檢查點**：
+- 所有單元測試通過
+- 端到端測試通過
+- 可以成功處理 big5 和 utf-8 編碼檔案
+- 可以成功處理分隔符號和固定長度格式
+- 檔案前綴匹配邏輯正確運作
 
 ---
 
-## 階段 5：使用者故事 3 - 呼叫遮罩轉換服務與重試機制（優先級：P2）
+## Phase 4: User Story 2 - 多檔案批次處理與並行控制（P1）
 
-**目標**：處理完成後呼叫下游遮罩服務，失敗時最多重試 3 次
+**目標**：Advisory Lock 機制，確保多 pod 環境下檔案不重複處理  
+**獨立測試**：模擬多個 pod 同時處理，驗證鎖定機制
 
-**獨立測試標準**：
-- 可成功呼叫下游 API
-- 5xx 錯誤自動重試（最多 3 次，指數退避）
-- 4xx 錯誤不重試
-- 重試失敗後標記任務失敗
-- 錯誤訊息包含 HTTP 狀態碼和原因
+### Advisory Lock 管理
 
-### 實作 - 下游 API 呼叫
+- [ ] T044 [P] [US2] 先寫測試：LockManager in tests/unit/test_lock_manager.py
+  ```python
+  def test_acquire_lock_success():
+      # Given: 檔案尚未被鎖定
+      # When: 嘗試取得 lock
+      # Then: 成功取得 lock
+  
+  def test_acquire_lock_failure():
+      # Given: 檔案已被其他 pod 鎖定
+      # When: 嘗試取得 lock
+      # Then: 取得失敗
+  ```
 
-- [X] T029 [P] [US3] 實作下游 API 呼叫器（services/downstream_caller.py）
-  - call_mask_api(task_id: str, parquet_path: str) → dict
-  - 使用 requests + tenacity 重試裝飾器
-  - 重試策略：3 次，指數退避 1-10 秒
-  - 5xx 錯誤可重試
-  - 4xx 錯誤不重試
-  - 拋出 SystemException(ErrorCode.DOWNSTREAM_CONNECTION_FAILED)
-  - 拋出 ProcessingException(ErrorCode.DOWNSTREAM_API_ERROR)
+- [ ] T045 [US2] 實作 LockManager in src/services/lock_manager.py
+  ```python
+  import hashlib
+  
+  class LockManager:
+      def acquire_lock(self, filename: str) -> bool:
+          """
+          使用 pg_try_advisory_lock() 取得檔案鎖定
+          lock_id = hash(filename) % 2^31
+          """
+          pass
+      
+      def release_lock(self, filename: str):
+          """釋放 advisory lock"""
+          pass
+  ```
+  驗證：`pytest tests/unit/test_lock_manager.py -v`
 
-**驗證**：
-```python
-# 測試成功呼叫（使用 mock 或測試環境）
-response = call_mask_api("test_task", "/output/test.parquet")
-assert response['status'] == 'success'
+### 批次處理邏輯
 
-# 測試 5xx 錯誤重試
-# Mock API 返回 503 兩次，第三次返回 200
-# 驗證重試次數 = 2
+- [ ] T046 [P] [US2] 先寫測試：批次處理器 in tests/unit/test_batch_processor.py
+  ```python
+  def test_process_multiple_files_sequentially():
+      # Given: NAS 有 5 個檔案
+      # When: 單一 pod 處理
+      # Then: 所有檔案依序處理完成
+  
+  def test_process_files_with_lock_conflict():
+      # Given: NAS 有 10 個檔案，模擬多 pod 環境
+      # When: 嘗試取得 lock
+      # Then: 已鎖定檔案被跳過，處理其他可用檔案
+  ```
 
-# 測試 4xx 錯誤不重試
-# Mock API 返回 400
-try:
-    call_mask_api("test_task", "/output/test.parquet")
-except ProcessingException as e:
-    assert e.error_code == ErrorCode.DOWNSTREAM_API_ERROR
-    assert "400" in e.message
-```
+- [ ] T047 [US2] 擴充 FileProcessor 支援 Lock in src/services/file_processor.py
+  ```python
+  def process_file_with_lock(self, nas_path: str, filename: str):
+      """
+      處理檔案前先取得 advisory lock
+      處理完成後釋放 lock（無論成功或失敗）
+      """
+      lock_acquired = self.lock_manager.acquire_lock(filename)
+      if not lock_acquired:
+          logger.warning(f"無法取得鎖定，跳過檔案：{filename}")
+          return
+      
+      try:
+          self.process_file(nas_path, filename)
+      finally:
+          self.lock_manager.release_lock(filename)
+  ```
 
-### 整合 - 加入下游 API 呼叫
+### 批次掃描與處理主流程
 
-- [X] T030 [US3] 擴展 process_file() 加入下游 API 呼叫
-  - 在 Parquet 寫入成功後呼叫 call_mask_api()
-  - 捕捉 API 錯誤並記錄到 file_tasks.error_message
+- [ ] T048 [US2] 實作批次掃描主流程 in main.py
+  ```python
+  def main():
+      """
+      主要執行流程：
+      1. 掃描 NAS 目錄獲取檔案清單
+      2. 對每個檔案：
+         a. 嘗試取得 advisory lock
+         b. 若成功，處理檔案
+         c. 若失敗，跳過並處理下一個
+      3. 釋放所有資源
+      """
+      pass
+  ```
 
-**驗證**：
-```python
-# 執行檔案處理
-process_file(task_id)
+### 並行測試
 
-# 驗證 API 已被呼叫（檢查 mock 或日誌）
-# 驗證任務狀態 = completed
-```
+- [ ] T049 [US2] 並行處理測試 in tests/unit/test_us2_concurrent.py
+  ```python
+  def test_multiple_pods_no_duplicate_processing():
+      # Given: 10 個檔案，模擬 4 個 pod 同時執行
+      # When: 所有 pod 執行完成
+      # Then: 每個檔案只被處理一次
+  ```
 
-**檢查點**：此時 US3 完整功能，可呼叫下游服務並處理重試
-
----
-
-## 階段 6：使用者故事 4 - 資料類型處理與欄位轉碼標記（優先級：P3）
-
-**目標**：根據 field_definitions 的 data_type 和 transform_type 處理欄位
-
-**獨立測試標準**：
-- 可正確轉換資料類型（string, int, double, timestamp）
-- 保留 transform_type 標記到 Parquet metadata
-- 類型轉換失敗時記錄錯誤但繼續處理
-
-### 實作 - 資料類型轉換
-
-- [X] T031 [P] [US4] 實作資料類型轉換器（utils/type_converter.py）
-  - convert_value(value: str, data_type: str, field_name: str) → Any
-  - 支援類型：string, int, double, timestamp
-  - timestamp 格式：YYYY-MM-DD HH:MM:SS
-  - 轉換失敗返回 None 並記錄警告
-
-**驗證**：
-```python
-# 測試 int 轉換
-assert convert_value("12345", "int", "col1") == 12345
-assert convert_value("abc", "int", "col1") is None  # 轉換失敗
-
-# 測試 double 轉換
-assert convert_value("123.45", "double", "col2") == 123.45
-
-# 測試 timestamp 轉換
-from datetime import datetime
-result = convert_value("2025-12-06 10:00:00", "timestamp", "col3")
-assert isinstance(result, datetime)
-
-# 測試 string（保持原樣）
-assert convert_value("測試", "string", "col4") == "測試"
-```
-
-### 整合 - 加入類型轉換
-
-- [X] T032 [US4] 擴展 parse_file_content() 加入類型轉換
-  - 在解析後立即轉換每個欄位的資料類型
-  - 轉換失敗記錄警告但不中斷處理
-
-**驗證**：
-```python
-# 準備測試資料（包含不同類型）
-field_defs = [
-    {'name': 'id', 'type': 'int'},
-    {'name': 'amount', 'type': 'double'},
-    {'name': 'date', 'type': 'timestamp'},
-    {'name': 'name', 'type': 'string'}
-]
-content = "00001||123.45||2025-12-06 10:00:00||測試\n"
-file_record = FileRecord(delimiter="||", field_definitions=field_defs)
-
-batches = list(parse_file_content(content, file_record, "test"))
-record = batches[0][0]
-
-assert isinstance(record['id'], int)
-assert isinstance(record['amount'], float)
-assert isinstance(record['date'], datetime)
-assert isinstance(record['name'], str)
-```
-
-- [X] T033 [US4] 擴展 write_parquet() 加入 transform_type metadata
-  - 將 transform_type 寫入 Parquet schema metadata
-  - 下游服務可讀取 metadata 了解轉碼需求
-
-**驗證**：
-```python
-# 寫入 Parquet 含 transform_type
-field_defs = [
-    {'name': 'id', 'type': 'int', 'transform_type': 'mask'},
-    {'name': 'name', 'type': 'string', 'transform_type': 'hash'}
-]
-write_parquet(records, output_path, field_defs, "test")
-
-# 讀取驗證 metadata
-import pyarrow.parquet as pq
-parquet_file = pq.ParquetFile(output_path)
-metadata = parquet_file.schema_arrow.metadata
-assert b'transform_type' in metadata
-```
-
-**檢查點**：此時 US4 完整功能，可處理資料類型並標記轉碼需求
+**US2 檢查點**：
+- Advisory lock 機制正確運作
+- 多檔案批次處理無重複
+- Lock 超時機制正確
+- 異常時能正確釋放 lock
 
 ---
 
-## 階段 7：Polish & 跨切面關注點
+## Phase 5: User Story 3 - 呼叫遮罩轉換服務與重試機制（P2）
 
-**目的**：最終優化和生產環境準備
+**目標**：呼叫下游 API + 重試機制  
+**獨立測試**：Mock 下游服務，驗證重試邏輯
 
-### 任務狀態不一致修復
+### 下游 API 服務
 
-- [X] T034 [P] 實作啟動時的狀態修復（main.py）
-  - 掃描所有 status='processing' 且超過 1 小時的任務
-  - 重置為 status='pending'
-  - 記錄修復日誌
+- [ ] T050 [P] [US3] 先寫測試：DownstreamApiClient in tests/unit/test_downstream_api.py
+  ```python
+  def test_call_api_success():
+      # Given: Mock API 回傳成功
+      # When: 呼叫 API
+      # Then: 回傳成功狀態
+  
+  def test_call_api_retry_on_network_error():
+      # Given: Mock API 前 2 次失敗，第 3 次成功
+      # When: 呼叫 API
+      # Then: 自動重試並最終成功
+  
+  def test_call_api_max_retries_exceeded():
+      # Given: Mock API 持續失敗
+      # When: 呼叫 API
+      # Then: 重試 3 次後拋出異常
+  ```
 
-**驗證**：
-```python
-# 建立逾時任務（started_at = 2 小時前，status='processing'）
-# ...
+- [ ] T051 [US3] 實作 DownstreamApiClient（含重試機制）in src/services/downstream_api.py
+  ```python
+  from tenacity import retry, stop_after_attempt, wait_exponential
+  import requests
+  
+  class DownstreamApiClient:
+      @retry(
+          stop=stop_after_attempt(3),
+          wait=wait_exponential(multiplier=1, min=1, max=10)
+      )
+      def call_mask_service(self, parquet_path: str) -> dict:
+          """
+          呼叫下游遮罩轉換服務
+          重試策略：最多 3 次，指數退避（1s, 2s, 4s...最大 10s）
+          """
+          response = requests.post(self.api_url, json={"file_path": parquet_path})
+          response.raise_for_status()
+          return response.json()
+  ```
+  驗證：`pytest tests/unit/test_downstream_api.py -v`
 
-# 執行啟動修復
-fix_inconsistent_tasks(db_pool)
+### 整合到 FileProcessor
 
-# 驗證任務已重置為 pending
-task = task_repo.get_task_by_id(task_id)
-assert task['status'] == 'pending'
-```
+- [ ] T052 [US3] 擴充 FileProcessor 呼叫下游服務 in src/services/file_processor.py
+  ```python
+  def process_file_complete(self, nas_path: str, filename: str):
+      """
+      完整處理流程：
+      1. 檔案轉換（US1）
+      2. 呼叫下游服務（US3）
+      3. 更新最終狀態
+      """
+      # 轉換 parquet
+      parquet_path = self.process_file_with_lock(nas_path, filename)
+      
+      # 呼叫下游服務
+      try:
+          result = self.downstream_client.call_mask_service(parquet_path)
+          self.task_repo.update_task_status(task_id, "completed")
+      except Exception as e:
+          self.task_repo.update_task_status(task_id, "failed", error_msg=str(e))
+  ```
 
-### 前次失敗任務關聯
+### 端到端測試（US3）
 
-- [X] T035 實作前次失敗任務追蹤（services/file_processor.py）
-  - 在 create_task() 時查詢同名檔案的前次失敗任務
-  - 設定 previous_failed_task_id
+- [ ] T053 [US3] 端到端測試：重試機制 in tests/unit/test_us3_retry.py
+  ```python
+  def test_us3_api_retry_success():
+      # Given: API 前 2 次失敗，第 3 次成功
+      # When: 處理檔案並呼叫 API
+      # Then: 最終成功，任務狀態為 completed
+  
+  def test_us3_api_all_retries_failed():
+      # Given: API 持續失敗
+      # When: 處理檔案並呼叫 API
+      # Then: 重試 3 次後失敗，任務狀態為 failed
+  ```
 
-**驗證**：
-```python
-# 建立失敗任務
-task1 = task_repo.create_task(file_record_id=1, file_name="test.txt", previous_failed_task_id=None)
-task_repo.update_status(task1, 'failed', "測試錯誤")
-
-# 建立重試任務
-task2 = task_repo.create_task(file_record_id=1, file_name="test.txt", previous_failed_task_id=None)
-
-# 驗證關聯
-task2_info = task_repo.get_task_by_id(task2)
-assert task2_info['previous_failed_task_id'] == task1
-```
-
-### 效能優化
-
-- [ ] T036 [P] 驗證串流處理效能（測試 1GB 檔案）
-  - 記憶體使用量 < 500MB
-  - 處理速度 > 10,000 rows/sec
-
-- [ ] T037 [P] 驗證連線池行為（並行測試）
-  - 同時執行 20 個任務
-  - 連線池不耗盡
-  - 無連線洩漏
-
-### 文件與部署
-
-- [X] T038 [P] 建立 README.md（安裝、配置、執行說明）
-- [X] T039 [P] 建立 Kubernetes CronJob YAML（依照 plan.md §部署架構）
-- [X] T040 [P] 建立假資料 SQL 腳本（quickstart.md 的範例資料）
-
-**檢查點**：專案完整，可部署至生產環境
-
----
-
-## 依賴關係與執行順序
-
-### 必須順序執行
-
-1. **階段 1** → **階段 2**：基礎設施必須先完成
-2. **階段 2** → **階段 3/4/5/6**：基礎設施完成後才能開始使用者故事
-3. **階段 3** → **階段 5**：US1 完成後才能加入下游 API（US3）
-
-### 可並行執行
-
-- **階段 3 (US1)** ∥ **階段 4 (US2)**：檔案處理邏輯與批次處理邏輯可分開開發
-- **階段 6 (US4)**：可在 US1 完成後隨時加入，不阻塞其他功能
-- 標記 `[P]` 的任務：可與其他 `[P]` 任務並行執行
-
-### 使用者故事完成順序
-
-```
-階段 1 (設定)
-    ↓
-階段 2 (基礎設施) ← 必須完成
-    ↓
-    ├──→ 階段 3 (US1 - 基本檔案處理) 🎯 MVP
-    │        ↓
-    │    階段 5 (US3 - 下游 API)
-    │
-    ├──→ 階段 4 (US2 - 批次處理)
-    │
-    └──→ 階段 6 (US4 - 資料類型)
-         ↓
-階段 7 (Polish)
-```
+**US3 檢查點**：
+- 下游 API 呼叫成功
+- 重試機制正確運作（3 次）
+- 指數退避間隔正確
+- 錯誤訊息正確記錄
 
 ---
 
-## 並行執行範例：使用者故事 1
+## Phase 6: User Story 4 - 資料類型處理與欄位轉碼標記（P3）
 
-**開發者 A**：
-```bash
-# SFTP + 編碼偵測
-T017: 實作 SFTP 連線管理
-T018: 實作 SFTP 檔案讀取
-T019: 實作編碼偵測器
-```
+**目標**：支援多種資料類型轉換 + 轉碼型態標記  
+**獨立測試**：驗證各種資料類型轉換正確性
 
-**開發者 B**（同時進行）：
-```bash
-# 資料解析
-T020: 實作固定長度解析器
-T021: 實作分隔符號解析器
-T022: 實作批次解析器
-```
+### 資料類型轉換工具
 
-**開發者 C**（同時進行）：
-```bash
-# Parquet 寫入
-T023: 實作 Parquet 寫入器
-```
+- [ ] T054 [P] [US4] 先寫測試：TypeConverter in tests/unit/test_type_converter.py
+  ```python
+  def test_convert_to_int():
+      # Given: 字串 "123"
+      # When: 轉換為 int
+      # Then: 回傳 123
+  
+  def test_convert_to_double():
+      # 測試浮點數轉換
+  
+  def test_convert_to_timestamp():
+      # Given: "2025-12-07 14:30:00"
+      # When: 轉換為 timestamp
+      # Then: 回傳 datetime 物件
+  
+  def test_convert_invalid_type_raises_exception():
+      # Given: 無效的資料類型轉換
+      # When: 嘗試轉換
+      # Then: 拋出 ProcessingException
+  ```
 
-**整合**：
-```bash
-T024: 實作檔案處理服務（整合 A+B+C）
-```
+- [ ] T055 [US4] 實作 TypeConverter in src/utils/type_converter.py
+  ```python
+  from datetime import datetime
+  
+  class TypeConverter:
+      def convert(self, value: str, target_type: str):
+          """
+          轉換資料類型
+          支援類型：String, int, double, timestamp
+          """
+          if target_type == "int":
+              return int(value)
+          elif target_type == "double":
+              return float(value)
+          elif target_type == "timestamp":
+              return datetime.fromisoformat(value)
+          else:
+              return value  # String
+  ```
+  驗證：`pytest tests/unit/test_type_converter.py -v`
+
+### 整合到 ParserService
+
+- [ ] T056 [US4] 擴充 ParserService 支援類型轉換 in src/services/parser_service.py
+  ```python
+  def parse_with_type_conversion(
+      self, 
+      line: str, 
+      file_spec: FileSpecification,
+      field_definitions: list[FieldDefinition]
+  ) -> dict:
+      """
+      解析資料並進行類型轉換
+      回傳：{"field_name": converted_value, "transform_type": "mask"}
+      """
+      # 1. 解析原始資料（分隔符號或固定長度）
+      # 2. 對每個欄位進行類型轉換
+      # 3. 附加轉碼型態標記
+      pass
+  ```
+
+### Parquet Schema 定義
+
+- [ ] T057 [US4] 擴充 ParquetWriter 支援類型 schema in src/services/parquet_writer.py
+  ```python
+  def create_schema(self, field_definitions: list[FieldDefinition]) -> pa.Schema:
+      """
+      根據 field_definitions 建立 PyArrow Schema
+      支援類型：string, int32, float64, timestamp
+      """
+      fields = []
+      for field_def in field_definitions:
+          if field_def.data_type == "int":
+              pa_type = pa.int32()
+          elif field_def.data_type == "double":
+              pa_type = pa.float64()
+          elif field_def.data_type == "timestamp":
+              pa_type = pa.timestamp('us')
+          else:
+              pa_type = pa.string()
+          
+          fields.append(pa.field(field_def.field_name, pa_type))
+      
+      return pa.schema(fields)
+  ```
+
+### 端到端測試（US4）
+
+- [ ] T058 [US4] 建立混合類型測試檔案 in tests/fixtures/sample_files/
+  - mixed_types20251206001.txt（包含 string, int, double, timestamp）
+
+- [ ] T059 [US4] 端到端測試：類型轉換 in tests/unit/test_us4_types.py
+  ```python
+  def test_us4_mixed_types_conversion():
+      # Given: 檔案包含多種資料類型
+      # When: 處理檔案
+      # Then: Parquet 檔案中各欄位類型正確
+  
+  def test_us4_invalid_type_conversion_fails():
+      # Given: 檔案中有無效的數值資料
+      # When: 處理檔案
+      # Then: 拋出 ProcessingException，任務狀態為 failed
+  ```
+
+**US4 檢查點**：
+- 所有資料類型轉換正確
+- Parquet schema 正確定義
+- 轉碼型態標記正確記錄
+- 無效資料正確處理
 
 ---
 
-## 實作策略
+## Phase 7: 最終整合與打磨
 
-### MVP 優先（建議先完成）
+**目的**：跨故事整合 + 程式碼品質 + 文件完善
 
-**最小可行產品 = 階段 1 + 階段 2 + 階段 3 (US1)**
+### 主程式完善
 
-- 可處理單一檔案
-- 支援固定長度和分隔符號格式
-- 自動錯誤處理和記錄
-- **預計開發時間**：3-5 天
+- [ ] T060 完善 main.py 入口點 in boa-bch-transformat/main.py
+  ```python
+  import sys
+  from src.config.settings import Settings
+  from src.utils.logger import setup_logger
+  from src.services.file_processor import FileProcessor
+  
+  def main():
+      # 1. 載入配置
+      settings = Settings()
+      setup_logger(settings.env)
+      
+      # 2. 初始化服務
+      processor = FileProcessor()
+      
+      # 3. 執行批次處理
+      processor.run_batch()
+      
+      logger.info("批次處理完成")
+  
+  if __name__ == "__main__":
+      main()
+  ```
 
-### 漸進式交付
+### 錯誤處理完善
 
-1. **第一次交付**：MVP（US1）
-2. **第二次交付**：+ US2（批次處理）
-3. **第三次交付**：+ US3（下游 API）
-4. **第四次交付**：+ US4（資料類型）+ Polish
+- [ ] T061 完善所有錯誤處理 in src/services/*.py
+  - 確保所有外部呼叫（SFTP、DB、API）都有 try-except
+  - 確保所有錯誤訊息使用繁體中文
+  - 確保所有錯誤都記錄到 logger
+
+### 程式碼品質檢查
+
+- [ ] T062 執行 ruff 檢查並修正 in boa-bch-transformat/
+  ```bash
+  ruff check . --fix
+  ruff format .
+  ```
+
+- [ ] T063 確認測試覆蓋率 in boa-bch-transformat/
+  ```bash
+  pytest --cov=src --cov-report=html
+  # 目標：> 80% 覆蓋率
+  ```
+
+### 文件完善
+
+- [ ] T064 建立 README.md in boa-bch-transformat/README.md
+  - 專案簡介
+  - 安裝步驟
+  - 環境配置
+  - 執行方式
+  - 測試方式
+
+- [ ] T065 建立測試 fixtures 說明 in tests/fixtures/README.md
+  - 測試檔案說明
+  - 資料庫測試資料說明
+
+### 最終驗證
+
+- [ ] T066 執行完整測試套件
+  ```bash
+  pytest tests/ -v --cov=src
+  ```
+
+- [ ] T067 執行端到端場景測試
+  - 場景 1：單一檔案處理（big5, 分隔符號）
+  - 場景 2：多檔案批次處理（並行控制）
+  - 場景 3：下游服務呼叫（含重試）
+  - 場景 4：混合資料類型處理
 
 ---
 
-## 驗證檢查清單
+## 依賴關係圖
 
-每個任務完成後必須驗證：
+```mermaid
+graph TD
+    Setup[Phase 1: Setup] --> Foundational[Phase 2: Foundational]
+    Foundational --> US1[Phase 3: US1 - 檔案轉換]
+    Foundational --> US2[Phase 4: US2 - 並行控制]
+    Foundational --> US3[Phase 5: US3 - API 呼叫]
+    Foundational --> US4[Phase 6: US4 - 類型轉換]
+    US1 --> US2
+    US1 --> US3
+    US1 --> US4
+    US2 --> Final[Phase 7: 最終整合]
+    US3 --> Final
+    US4 --> Final
+```
 
-**程式碼品質**：
-- [ ] 遵循 PEP 8 風格規範
-- [ ] 所有函數都有 docstring（繁體中文）
-- [ ] 錯誤訊息使用繁體中文
-- [ ] 使用 ErrorCode 統一管理錯誤
+## 並行執行機會
 
-**功能驗證**：
-- [ ] 單元測試通過（如果有）
-- [ ] 手動測試驗證通過
-- [ ] 錯誤場景測試通過
-- [ ] 日誌輸出正確（JSON 格式）
+### Phase 2（Foundational）可並行任務
+- T010-T012（異常處理）可與 T013-T014（配置日誌）並行
+- T017-T020（Models）全部可並行
 
-**整合驗證**：
-- [ ] 可與其他模組正確整合
-- [ ] 資料庫操作正確（無遺漏的連線）
-- [ ] 異常處理正確（SystemException / ProcessingException）
+### Phase 3（US1）可並行任務
+- T021-T022（NAS 掃描）可與 T023-T030（Repositories）並行
+- T031-T032（SFTP）可與 T033-T034（編碼）並行
+- T035-T037（Parser）可與 T038-T039（Parquet）並行
+
+### Phase 4（US2）可並行任務
+- T044-T045（LockManager）可與 T046-T047（BatchProcessor）並行
+
+### Phase 5（US3）可並行任務
+- T050-T051（API Client）獨立開發
+
+### Phase 6（US4）可並行任務
+- T054-T055（TypeConverter）可與 T056-T057（Parser/Parquet 擴充）並行
 
 ---
 
-## 注意事項
+## 實作策略建議
 
-1. **任務大小**：每個任務應在 30 分鐘內完成，立即可驗證結果
-2. **獨立性**：標記 `[P]` 的任務可並行開發，不會有檔案衝突
-3. **驗證優先**：每個任務完成後立即執行驗證腳本
-4. **錯誤處理**：所有外部呼叫必須使用 ErrorCode
-5. **日誌記錄**：所有關鍵操作必須記錄日誌（INFO/ERROR 級別）
-6. **測試資料**：使用 quickstart.md 提供的假資料進行測試
-7. **提交頻率**：每完成一個任務即提交，保持小步提交
+### MVP（最小可行產品）範圍
+- **Phase 1-3**：Setup + Foundational + US1
+- **驗收**：能成功處理單一檔案，產生正確的 parquet 檔案
+
+### 第一次迭代（完整核心功能）
+- **Phase 1-4**：Setup + Foundational + US1 + US2
+- **驗收**：能在多 pod 環境下處理多個檔案，無重複處理
+
+### 第二次迭代（完整功能）
+- **Phase 1-6**：所有 User Stories
+- **驗收**：所有驗收標準通過
+
+### 最終交付
+- **Phase 1-7**：所有功能 + 程式碼品質 + 文件
+- **驗收**：測試覆蓋率 > 80%，所有檢查通過
 
 ---
 
-**總任務數**：40 個任務
-**預計開發時間**：
-- MVP（US1）：3-5 天
-- 完整功能：10-15 天
+## 任務統計
 
-**並行機會**：20+ 個任務可並行執行
+- **總任務數**：67 個
+- **Setup（Phase 1）**：7 個
+- **Foundational（Phase 2）**：13 個
+- **US1（Phase 3）**：23 個
+- **US2（Phase 4）**：6 個
+- **US3（Phase 5）**：4 個
+- **US4（Phase 6）**：6 個
+- **Final（Phase 7）**：8 個
+
+**預估工時**（以 30 分鐘/任務計）：
+- MVP：43 任務 × 0.5 小時 = 21.5 小時
+- 完整核心：49 任務 × 0.5 小時 = 24.5 小時
+- 完整功能：59 任務 × 0.5 小時 = 29.5 小時
+- 最終交付：67 任務 × 0.5 小時 = 33.5 小時
+
+---
+
+**最後更新**：2025-12-07  
+**版本**：4.0  
+**核心變更**：NAS 掃描 + file_specifications 資料模型 + 連續檔名格式

@@ -134,6 +134,7 @@
 ```
 <!-- step 3.5. 執行結果: 產出檢查清單報告，plan-phase1-report.md -->
 
+---
 ### Step 4. plan 
 <!-- step 4.1 執行 plan  -->
 ```yaml
@@ -166,6 +167,7 @@
 ```
 <!-- step 4.3. 執行結果: 整合錯誤訊息到 Error code -->
 
+---
 ### Step 5. task
 <!-- step 5.1 執行 task -->
 ```yaml
@@ -173,6 +175,7 @@
     - 拆分 task 任務時，確保每個任務都足夠小，並且能夠立即驗證結果。
 ```
 
+---
 ### Step 6. plan
 <!-- step 6.1 執行 plan -->
 ```yaml
@@ -182,6 +185,7 @@
     - 在 task 或 implement 階段時，作為開發階段的 DB 和 SFTP 預設值會使用是什麼? 會在哪個階段定義?
 ```
 
+---
 ### Step 7. implement
 <!-- step 7.1 執行 implement -->
 ```yaml
@@ -203,6 +207,7 @@
     - 多餘的專案結構。
 ```
 
+---
 ### Step 8. 調整規格 specify, 一倂調整 plan, 列出 checklist 檢查
 
 <!-- step 8.1 執行 plan -->
@@ -245,4 +250,13 @@
 ```yaml
     請優先參考 constitution.md，並採取以下行動:
     - 依賴項的部分不需要提供版本號，透過目前的 python 使用的版本直接下載就好，等最後實作，有衝突疑慮再來調整。
+```
+
+---
+### Step 9. task
+
+```yaml
+    請優先參考 constitution.md，並採取以下行動:
+    - 檢查 spec 和 plan 更版調整，重新產生 task，確保每個任務都足夠小，並且能夠立即驗證結果。
+    - 若有必要刪除，可以直接刪除。後續實作時再重新驗證。
 ```
